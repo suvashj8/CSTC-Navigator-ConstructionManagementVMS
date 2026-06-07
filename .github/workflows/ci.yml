@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+            web/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix frontend
+          npm ci --prefix web
+
+      - name: Build frontend (Vite)
+        run: npm run build --prefix frontend
+
+      - name: Build API (Next.js)
+        env:
+          JWT_SECRET: ci-jwt-secret-change-in-production-min-32-chars
+          MAIN_DB_HOST: localhost
+          MAIN_DB_PORT: 5432
+          MAIN_DB_USER: vms
+          MAIN_DB_PASSWORD: vms
+          MAIN_DB_NAME: vms_main
+          SEED_ON_STARTUP: "false"
+        run: npm run build --prefix web
