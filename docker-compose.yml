@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: vms
+      POSTGRES_PASSWORD: vms
+      POSTGRES_DB: vms_main
+    ports:
+      - "5432:5432"
+    volumes:
+      - vms_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vms -d vms_main"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      MAIN_DB_HOST: postgres
+      MAIN_DB_PORT: 5432
+      MAIN_DB_USER: vms
+      MAIN_DB_PASSWORD: vms
+      MAIN_DB_NAME: vms_main
+      REDIS_ADDR: redis:6379
+      JWT_SECRET: dev-jwt-secret-change-in-production-min-32-chars
+      SEED_ON_STARTUP: "true"
+      EXPORT_DIR: /app/exports
+      CORS_ORIGINS: http://localhost:5173,capacitor://localhost,http://localhost
+    volumes:
+      - ./backend/exports:/app/exports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      GO_API_URL: http://backend:8080
+      JWT_SECRET: dev-jwt-secret-change-in-production-min-32-chars
+      MAIN_DB_HOST: postgres
+      MAIN_DB_PORT: 5432
+      MAIN_DB_USER: vms
+      MAIN_DB_PASSWORD: vms
+      MAIN_DB_NAME: vms_main
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["./worker"]
+    environment:
+      MAIN_DB_HOST: postgres
+      MAIN_DB_PORT: 5432
+      MAIN_DB_USER: vms
+      MAIN_DB_PASSWORD: vms
+      MAIN_DB_NAME: vms_main
+      REDIS_ADDR: redis:6379
+      EXPORT_DIR: /app/exports
+    volumes:
+      - ./backend/exports:/app/exports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  vms_pg:

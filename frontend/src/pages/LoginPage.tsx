@@ -1,0 +1,163 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { HardHat, Lock, Mail, Sparkles, Truck } from "lucide-react";
+import { login } from "@/api/auth";
+import { useAuthStore } from "@/store/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+const demoAccounts = [
+  { email: "admin@vms.local", password: "admin123", role: "Admin" },
+  { email: "manager@vms.local", password: "manager123", role: "Manager" },
+  { email: "supervisor@vms.local", password: "super123", role: "Supervisor" },
+  { email: "employee@vms.local", password: "employee123", role: "Employee" },
+  { email: "driver@vms.local", password: "driver123", role: "Driver" },
+];
+
+export default function LoginPage() {
+  const nav = useNavigate();
+  const setAuth = useAuthStore((s) => s.setAuth);
+  const tenantSubdomain = useAuthStore((s) => s.tenantSubdomain);
+  const setTenantSubdomain = useAuthStore((s) => s.setTenantSubdomain);
+  const [loading, setLoading] = useState(false);
+
+  return (
+    <div className="grid h-screen lg:min-h-screen lg:grid-cols-2 overflow-hidden">
+      <div className="relative hidden overflow-hidden bg-sidebar lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
+        <div className="relative flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/40">
+            <Truck className="h-6 w-6 text-primary-foreground" />
+          </div>
+          <span className="text-xl font-bold text-sidebar-foreground">VMS</span>
+        </div>
+        <div className="relative space-y-6">
+          <h1 className="text-4xl font-bold leading-tight tracking-tight text-sidebar-foreground">
+            Fleet control for construction sites
+          </h1>
+          <p className="max-w-md text-sidebar-foreground/70">
+            Track vehicles, equipment, allocations, insurance, and driver compliance across every work location.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {["Multi-site allocations", "Insurance alerts", "Driver licenses", "Role-based access"].map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-sidebar-border bg-sidebar-accent px-3 py-1 text-xs text-sidebar-foreground/80"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+        <p className="relative flex items-center gap-2 text-xs text-sidebar-foreground/50">
+          <HardHat className="h-3.5 w-3.5" />
+          Vehicle Management System · Demo mode
+        </p>
+      </div>
+
+      <div className="flex flex-col items-center justify-center overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] mesh-bg sm:p-6">
+        <div className="mb-6 flex items-center gap-3 lg:hidden">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/30">
+            <Truck className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div>
+            <p className="font-bold">VMS</p>
+            <p className="text-xs text-muted-foreground">Vehicle Management</p>
+          </div>
+        </div>
+        <Card className="w-full max-w-md border-0 shadow-xl shadow-primary/5">
+          <CardHeader className="space-y-1 text-center sm:text-left">
+            <div className="mb-2 flex justify-center sm:justify-start">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Welcome back</CardTitle>
+            <CardDescription>Sign in to your VMS workspace</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const email = String(fd.get("email")).trim().toLowerCase();
+                const password = String(fd.get("password")).trim();
+                setLoading(true);
+                try {
+                  const res = await login(email, password);
+                  setAuth(res.access_token, res.user);
+                  toast.success("Signed in successfully");
+                  nav("/dashboard", { replace: true });
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Sign in failed");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="subdomain">Tenant subdomain</Label>
+                <Input
+                  id="subdomain"
+                  name="subdomain"
+                  placeholder="demo"
+                  value={tenantSubdomain}
+                  onChange={(e) => setTenantSubdomain(e.target.value.trim().toLowerCase())}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="username"
+                    className="pl-10"
+                    defaultValue="admin@vms.local"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    className="pl-10"
+                    defaultValue="admin123"
+                    required
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                {loading ? "Signing in…" : "Sign in"}
+              </Button>
+              <Button type="button" variant="link" className="w-full" onClick={() => nav("/platform/login")}>
+                Super-user platform console
+              </Button>
+            </form>
+            <div className="mt-4 space-y-1 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">Demo accounts</p>
+              {demoAccounts.map((a) => (
+                <p key={a.email}>
+                  <code className="rounded bg-muted px-1">{a.role}</code> {a.email} / {a.password}
+                </p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

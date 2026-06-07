@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Navigator VMS</string>
+    <string name="title_activity_main">Navigator VMS</string>
+    <string name="package_name">com.navigator.vms</string>
+    <string name="custom_url_scheme">com.navigator.vms</string>
+</resources>
