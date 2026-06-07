@@ -2,7 +2,7 @@ import { isNative } from "./platform";
 
 /**
  * API base URL resolution:
- * - Web dev: empty string → Vite proxy to localhost backend
+ * - Web dev: empty string → Vite proxy to Next.js API on :3000
  * - Web prod / native: set VITE_API_URL (required on device — localhost is not reachable)
  */
 export function getApiBaseUrl(): string {

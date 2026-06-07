@@ -16,5 +16,9 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
+COPY --from=builder /app/instrumentation.ts ./instrumentation.ts
+COPY --from=builder /app/sql ./sql
+COPY --from=builder /app/scripts ./scripts
+RUN mkdir -p /app/exports
 EXPOSE 3000
 CMD ["npm", "start"]

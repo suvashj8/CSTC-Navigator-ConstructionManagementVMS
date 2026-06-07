@@ -1,46 +1,50 @@
-# Navigator VMS — Next.js API Gateway
+# Navigator VMS — Next.js API
 
-Client-facing API layer built with **Next.js 15 App Router**. The React (Vite) frontend and Capacitor mobile apps call `/api/v1/*` through this service.
+Full REST API for Navigator VMS. All `/api/v1/*` routes are handled here (no Go proxy).
 
 ## Architecture
 
 ```
-Mobile / PWA (Vite)  →  Next.js :3000  →  Go services :8080 (legacy routes)
-                      ↘  PostgreSQL (fuel-logs, maintenance — native Next handlers)
+Mobile / PWA (Vite)  →  Next.js :3000  →  PostgreSQL (main + tenant DBs)
+                                    ↘  Redis (optional health check)
+Expiry worker (node-cron)  →  PostgreSQL
 ```
 
-- **Implemented in Next.js:** `fuel-logs`, `maintenance` (work orders only)
-- **Proxied to Go (during migration):** auth, assets, allocations, users, reports, etc.
+## Development
 
-Set `API_PORT=3000` in the Vite dev server (or `VITE_API_URL`) so the UI talks to Next.js instead of Go directly.
-
-## Local development
-
-```powershell
-# Terminal 1 — data + Go worker/API
-docker compose up -d postgres redis backend worker
-
-# Terminal 2 — Next.js API gateway
-cd web
+```bash
+cp .env.example .env.local
 npm install
 npm run dev
-
-# Terminal 3 — frontend (proxy to Next.js)
-cd frontend
-$env:API_PORT="3000"
-npm run dev
 ```
+
+API: http://localhost:3000  
+Health: http://localhost:3000/health
 
 ## Environment
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `GO_API_URL` | `http://localhost:8080` | Upstream Go API for proxied routes |
-| `JWT_SECRET` | (required for native handlers) | Must match Go `JWT_SECRET` |
-| `MAIN_DB_*` | postgres docker defaults | Main DB for tenant resolution |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAIN_DB_*` | localhost/vms | Platform registry database |
+| `JWT_SECRET` | (dev default) | HS256 signing secret |
+| `SEED_ON_STARTUP` | `false` | Run demo seed on server start |
+| `EXPORT_DIR` | `./exports` | Report file output directory |
+| `REDIS_ADDR` | — | Optional Redis for health checks |
+| `CORS_ORIGINS` | localhost:5173 | Comma-separated allowed origins |
 
-## Migration plan
+## Worker
 
-1. ✅ Fuel logs + maintenance work orders (no PM schedules / inspections)
-2. Move auth + tenant middleware fully into Next.js
-3. Port remaining CRUD routes from Go; retire Go HTTP server when complete
+Daily expiry scan (06:00 UTC):
+
+```bash
+npm run worker
+```
+
+## Production
+
+```bash
+npm run build
+npm start
+```
+
+Docker: see root `docker-compose.yml` (`web` + `worker` services).

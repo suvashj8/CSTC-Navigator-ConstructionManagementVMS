@@ -25,14 +25,13 @@ services:
       timeout: 3s
       retries: 10
 
-  backend:
+  web:
     build:
-      context: ./backend
+      context: ./web
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "3000:3000"
     environment:
-      PORT: 8080
       MAIN_DB_HOST: postgres
       MAIN_DB_PORT: 5432
       MAIN_DB_USER: vms
@@ -44,53 +43,29 @@ services:
       EXPORT_DIR: /app/exports
       CORS_ORIGINS: http://localhost:5173,capacitor://localhost,http://localhost
     volumes:
-      - ./backend/exports:/app/exports
+      - ./web/exports:/app/exports
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-  web:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      GO_API_URL: http://backend:8080
-      JWT_SECRET: dev-jwt-secret-change-in-production-min-32-chars
-      MAIN_DB_HOST: postgres
-      MAIN_DB_PORT: 5432
-      MAIN_DB_USER: vms
-      MAIN_DB_PASSWORD: vms
-      MAIN_DB_NAME: vms_main
-    depends_on:
-      postgres:
-        condition: service_healthy
-      backend:
-        condition: service_started
 
   worker:
     build:
-      context: ./backend
+      context: ./web
       dockerfile: Dockerfile
-    command: ["./worker"]
+    command: ["node", "scripts/worker.mjs"]
     environment:
       MAIN_DB_HOST: postgres
       MAIN_DB_PORT: 5432
       MAIN_DB_USER: vms
       MAIN_DB_PASSWORD: vms
       MAIN_DB_NAME: vms_main
-      REDIS_ADDR: redis:6379
-      EXPORT_DIR: /app/exports
-    volumes:
-      - ./backend/exports:/app/exports
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      web:
+        condition: service_started
 
 volumes:
   vms_pg:

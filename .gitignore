@@ -13,27 +13,12 @@ out/
 .turbo/
 *.tsbuildinfo
 
-# Go
-backend/bin/
-backend/tmp/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-coverage.out
-coverage.html
-vendor/
-
 # Environment & secrets (keep *.example files)
 .env
 .env.*
 !.env.example
 !**/.env.example
 !**/.env.*.example
-backend/.env
 frontend/.env
 frontend/.env.development
 frontend/.env.production
@@ -112,7 +97,7 @@ frontend/android/app/src/main/assets/public/
 frontend/ios/App/App/public/
 
 # Exports & uploads (runtime data)
-backend/exports/
+web/exports/
 uploads/
 **/exports/
 

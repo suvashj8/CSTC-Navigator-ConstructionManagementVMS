@@ -42,3 +42,17 @@ export function internal(message: string) {
     { status: 500 }
   );
 }
+
+export function notFound(message: string) {
+  return NextResponse.json(
+    { success: false, error: { code: "NOT_FOUND", message } },
+    { status: 404 }
+  );
+}
+
+export function serviceUnavailable(message: string) {
+  return NextResponse.json(
+    { success: false, error: { code: "SERVICE_UNAVAILABLE", message } },
+    { status: 503 }
+  );
+}
