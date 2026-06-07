@@ -8,7 +8,7 @@
 
 | Item | Value |
 |------|-------|
-| **GitHub** | [CSTC-Navigator-ConstructionManagementVMS](https://github.com) *(update URL after first push)* |
+| **GitHub** | [CSTC-Navigator-ConstructionManagementVMS](https://github.com/suvashj8/CSTC-Navigator-ConstructionManagementVMS) |
 | **Stack** | Go · PostgreSQL · Redis · React · Next.js · Capacitor |
 | **License** | Private / internal CSTC project |
 
@@ -46,7 +46,7 @@ Use **Next.js on port 3000** as the API entry point in production. Set `API_PORT
 ### 1. Clone & install
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/CSTC-Navigator-ConstructionManagementVMS.git
+git clone https://github.com/suvashj8/CSTC-Navigator-ConstructionManagementVMS.git
 cd CSTC-Navigator-ConstructionManagementVMS
 
 npm install
