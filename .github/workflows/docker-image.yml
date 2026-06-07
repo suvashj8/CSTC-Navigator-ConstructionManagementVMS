@@ -2,17 +2,26 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [web, frontend]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build API image (Next.js)
+        if: matrix.service == 'web'
+        run: docker build web --file web/Dockerfile --tag navigator-vms-api:ci
+
+      - name: Build UI image (Vite + nginx)
+        if: matrix.service == 'frontend'
+        run: docker build frontend --file frontend/Dockerfile --build-arg VITE_API_URL= --tag navigator-vms-ui:ci
