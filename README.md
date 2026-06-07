@@ -107,6 +107,8 @@ npm run dev:full
 
 Open **http://localhost:5173** · API health: **http://localhost:3000/health**
 
+> **After pulling updates:** run `npm run docker:up` (rebuilds API image). If login returns **500**, an old Docker image may still be proxying to the removed Go backend — run `docker compose down && docker compose up --build --remove-orphans -d`.
+
 ### Demo accounts
 
 | Role | Email | Password | Subdomain |

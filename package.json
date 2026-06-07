@@ -16,7 +16,7 @@
     "dev:ui:proxy": "cross-env API_PORT=3000 npm run dev --prefix frontend",
     "dev:api": "npm run dev --prefix web",
     "dev:stack": "npm run dev:next",
-    "docker:up": "node scripts/check-docker.mjs && docker compose up -d postgres redis web worker",
+    "docker:up": "node scripts/check-docker.mjs && docker compose up --build --remove-orphans -d postgres redis web worker",
     "docker:down": "docker compose down",
     "build": "npm run build --prefix frontend && npm run build --prefix web"
   },
