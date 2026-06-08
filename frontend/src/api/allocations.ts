@@ -17,8 +17,10 @@ export async function listAllocations(params: { page?: number; per_page?: number
 
 export async function createAllocation(body: {
   asset_id: string;
-  from_location_id: string;
-  to_location_id: string;
+  from_location_id?: string;
+  from_location_name?: string;
+  to_location_id?: string;
+  to_location_name?: string;
   driver_id: string;
   start_date: string;
   expected_return: string;
@@ -26,14 +28,20 @@ export async function createAllocation(body: {
   if (useMock) {
     await delay();
     const asset = MOCK_ASSETS.find((a) => a.id === body.asset_id);
-    const from = MOCK_LOCATIONS.find((l) => l.id === body.from_location_id);
-    const to = MOCK_LOCATIONS.find((l) => l.id === body.to_location_id);
+    const from =
+      MOCK_LOCATIONS.find((l) => l.id === body.from_location_id) ??
+      MOCK_LOCATIONS.find((l) => l.name.toLowerCase() === (body.from_location_name ?? "").trim().toLowerCase());
+    const to =
+      MOCK_LOCATIONS.find((l) => l.id === body.to_location_id) ??
+      MOCK_LOCATIONS.find((l) => l.name.toLowerCase() === (body.to_location_name ?? "").trim().toLowerCase());
     const alloc: Allocation = {
       id: `alloc-${Date.now()}`,
       ...body,
       asset_label: asset ? `${asset.reg_serial_no} — ${asset.make} ${asset.model}` : undefined,
-      from_location_name: from?.name,
-      to_location_name: to?.name,
+      from_location_id: from?.id ?? body.from_location_id ?? "",
+      to_location_id: to?.id ?? body.to_location_id ?? "",
+      from_location_name: from?.name ?? body.from_location_name,
+      to_location_name: to?.name ?? body.to_location_name,
       state: "pending",
     };
     mockAllocations = [alloc, ...mockAllocations];

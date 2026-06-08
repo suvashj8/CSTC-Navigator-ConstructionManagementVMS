@@ -169,4 +169,5 @@ export const VEHICLE_DEPARTMENTS = [
   "Maintenance",
   "Administration",
   "Executive",
+  "Other",
 ] as const;

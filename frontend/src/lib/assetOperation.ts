@@ -1,6 +1,14 @@
 import type { OperationFieldState } from "@/components/assets/VehicleOperationFields";
 import type { Asset, AssetType } from "@/types/domain";
 import {
+  defaultOperationModePick,
+  isDynamicCustomMode,
+  isHourlyFromOperationPick,
+  resolveOperationFromPick,
+  type OperationModeMeta,
+} from "@/lib/operationModeCatalog";
+import type { VehicleCategoryMeta } from "@/lib/vehicleCategory";
+import {
   defaultOperationMode,
   type OperationMode,
   usesHourlyOperation,
@@ -32,21 +40,29 @@ export function usesHourlyOperationForAsset(
   vehicleCategory: string,
   operationMode: OperationMode
 ): boolean {
+  if (operationMode === "custom") return false;
   if (assetType === "equipment" || assetType === "tool") return true;
   return usesHourlyOperation(vehicleCategory, operationMode);
 }
 
-export function canChooseOperationModeForAsset(assetType: AssetType, vehicleCategory: string): boolean {
+export function canChooseOperationModeForAsset(
+  assetType: AssetType,
+  vehicleCategory: string,
+  catalog: VehicleCategoryMeta[] = []
+): boolean {
   if (assetType !== "vehicle") return false;
-  return vehicleCategory === "Other" || !vehicleCategory;
+  if (!vehicleCategory.trim()) return true;
+  const meta = catalog.find((c) => c.name.toLowerCase() === vehicleCategory.trim().toLowerCase());
+  if (meta) return meta.operationModes === "both";
+  return vehicleCategory === "Other";
 }
 
-/** Matches the Mode badge / operationModeLabel logic used in the operations table. */
 export function matchesOperationModeFilter(
   asset: Asset,
   filter: "all" | "km" | "hour"
 ): boolean {
   if (filter === "all") return true;
+  if (asset.operation_mode === "custom") return filter === "km";
   const hourly = usesHourlyOperationForAsset(
     asset.asset_type,
     asset.vehicle_category ?? "",
@@ -59,18 +75,22 @@ export function matchesOperationModeFilter(
 type ResolvedOperation = {
   vehicle_category: string | null;
   operation_mode: OperationMode;
+  operation_mode_label: string | null;
   route_from: string | null;
   route_to: string | null;
   operation_km: number | null;
   operation_place: string | null;
   operation_hours: number | null;
   operation_minutes: number | null;
+  operation_custom_fields: Record<string, string> | null;
 };
 
 export function resolveAssetOperation(
   asset: Asset,
   vehicleCategory: string,
-  operation: OperationFieldState
+  operation: OperationFieldState,
+  categoryCatalog: VehicleCategoryMeta[] = [],
+  operationCatalog: OperationModeMeta[] = []
 ): ResolvedOperation {
   const opt = (s: string) => {
     const t = s.trim();
@@ -93,27 +113,59 @@ export function resolveAssetOperation(
     return {
       vehicle_category: null,
       operation_mode: "hour",
+      operation_mode_label: null,
       route_from: null,
       route_to: null,
       operation_km: null,
       operation_place: opt(operation.operation_place),
       operation_hours: parseIntOpt(operation.operation_hours),
       operation_minutes: parseIntOpt(operation.operation_minutes),
+      operation_custom_fields: null,
     };
   }
 
   const category = vehicleCategory.trim();
-  const hourly = usesHourlyOperation(category, operation.operation_mode);
-  const mode: OperationMode = hourly ? "hour" : "km";
+  const pick = operation.operation_mode_pick || defaultOperationModePick(category, categoryCatalog);
+  const customDynamic = isDynamicCustomMode(pick, operationCatalog);
+  const hourly = isHourlyFromOperationPick(
+    pick,
+    operation.operation_mode,
+    category,
+    categoryCatalog,
+    operationCatalog
+  );
+  const { mode, label } = resolveOperationFromPick(pick, operationCatalog);
+
+  if (customDynamic) {
+    const customFields = Object.fromEntries(
+      Object.entries(operation.operation_custom_fields)
+        .map(([k, v]) => [k, v.trim()] as const)
+        .filter(([, v]) => v)
+    );
+    return {
+      vehicle_category: category || null,
+      operation_mode: "custom",
+      operation_mode_label: label,
+      route_from: null,
+      route_to: null,
+      operation_km: null,
+      operation_place: null,
+      operation_hours: null,
+      operation_minutes: null,
+      operation_custom_fields: customFields,
+    };
+  }
 
   return {
     vehicle_category: category || null,
-    operation_mode: mode,
+    operation_mode: hourly ? "hour" : mode,
+    operation_mode_label: label,
     route_from: hourly ? null : opt(operation.route_from),
     route_to: hourly ? null : opt(operation.route_to),
     operation_km: hourly ? null : parseNum(operation.operation_km),
     operation_place: hourly ? opt(operation.operation_place) : null,
     operation_hours: hourly ? parseIntOpt(operation.operation_hours) : null,
     operation_minutes: hourly ? parseIntOpt(operation.operation_minutes) : null,
+    operation_custom_fields: null,
   };
 }

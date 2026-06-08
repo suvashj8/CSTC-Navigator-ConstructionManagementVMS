@@ -12,8 +12,15 @@ import {
   VehicleOperationFields,
   type OperationFieldState,
 } from "@/components/assets/VehicleOperationFields";
+import { VehicleCategoryPicker } from "@/components/assets/VehicleCategoryPicker";
 import { vehicleFieldsFromAsset } from "@/components/assets/VehicleAssetFields";
-import { VEHICLE_CATEGORIES } from "@/data/vehicleCatalog";
+import { useOperationModes } from "@/hooks/useOperationModes";
+import { useVehicleCategories } from "@/hooks/useVehicleCategories";
+import {
+  defaultOperationModePick,
+  isHourlyFromOperationPick,
+  OPERATION_MODE_OTHER,
+} from "@/lib/operationModeCatalog";
 import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/guards/ProtectedRoute";
 import {
@@ -26,7 +33,7 @@ import {
 import { formatOperationSummary, operationModeLabel } from "@/lib/operationDisplay";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
-import { defaultOperationMode, usesHourlyOperation } from "@/lib/vehicleOperation";
+import { VEHICLE_CATEGORY_OTHER } from "@/lib/vehicleCategory";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +47,8 @@ import type { AssetType } from "@/types/domain";
 
 export default function OperationsPage() {
   const qc = useQueryClient();
+  const { catalog } = useVehicleCategories();
+  const { catalog: operationCatalog } = useOperationModes();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -95,12 +104,15 @@ export default function OperationsPage() {
     setEditCategory(category);
     setOperation({
       operation_mode: vf.operation_mode || defaultOperationModeForAsset(asset),
+      operation_mode_pick: vf.operation_mode_pick,
+      operation_mode_label: vf.operation_mode_label,
       route_from: vf.route_from,
       route_to: vf.route_to,
       operation_km: vf.operation_km,
       operation_place: vf.operation_place,
       operation_hours: vf.operation_hours,
       operation_minutes: vf.operation_minutes,
+      operation_custom_fields: vf.operation_custom_fields,
     });
     setOpen(true);
   };
@@ -118,16 +130,38 @@ export default function OperationsPage() {
         toast.error("Select a vehicle category before saving the operation");
         return;
       }
+      if (category === VEHICLE_CATEGORY_OTHER) {
+        toast.error("Choose Other to add a custom category first");
+        return;
+      }
     }
 
     const category = resolvedCategory(editing);
-    const resolved = resolveAssetOperation(editing, category, operation);
+    const resolved = resolveAssetOperation(editing, category, operation, catalog, operationCatalog);
+    if (editing.asset_type === "vehicle") {
+      const pick = operation.operation_mode_pick || defaultOperationModePick(category, catalog);
+      if (pick === OPERATION_MODE_OTHER || !pick.trim()) {
+        toast.error("Choose Other to add a custom operation mode, or pick an existing one");
+        return;
+      }
+    }
     const hourly =
       editing.asset_type !== "vehicle"
         ? true
-        : usesHourlyOperation(category, operation.operation_mode);
+        : isHourlyFromOperationPick(
+            operation.operation_mode_pick || defaultOperationModePick(category, catalog),
+            operation.operation_mode,
+            category,
+            catalog,
+            operationCatalog
+          );
 
-    if (hourly) {
+    if (resolved.operation_mode === "custom") {
+      if (!resolved.operation_custom_fields || Object.keys(resolved.operation_custom_fields).length === 0) {
+        toast.error("Enter at least one value for the custom operation fields");
+        return;
+      }
+    } else if (hourly) {
       if (!resolved.operation_place && !resolved.operation_hours && !resolved.operation_minutes) {
         toast.error("Enter operation place and/or hours");
         return;
@@ -159,6 +193,8 @@ export default function OperationsPage() {
         bluebook_issued_at: editing.bluebook_issued_at,
         bluebook_expires_at: editing.bluebook_expires_at,
         operation_mode: resolved.operation_mode,
+        operation_mode_label: resolved.operation_mode_label,
+        operation_custom_fields: resolved.operation_custom_fields,
         route_from: resolved.route_from,
         route_to: resolved.route_to,
         operation_km: resolved.operation_km,
@@ -396,42 +432,28 @@ export default function OperationsPage() {
               </div>
 
               {editing.asset_type === "vehicle" && !editing.vehicle_category ? (
-                <>
-                  <div className={DIALOG_FORM_FIELD}>
-                    <Label>Vehicle category *</Label>
-                    <Select
-                      value={editCategory || undefined}
-                      onValueChange={(v) => {
-                        setEditCategory(v);
-                        setOperation((prev) => ({
-                          ...emptyOperationFields(),
-                          operation_mode: defaultOperationMode(v),
-                        }));
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category (e.g. Truck, Dozer)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {VEHICLE_CATEGORIES.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className={cn(DIALOG_FORM_FIELD, "sm:col-span-2 flex items-end pb-2")}>
-                    <p className="text-xs text-muted-foreground">
-                      Required for vehicles before recording route or hourly operation.
-                    </p>
-                  </div>
-                </>
+                <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
+                  <VehicleCategoryPicker
+                    value={editCategory}
+                    onCategoryChange={(name, _meta, defaultMode) => {
+                      setEditCategory(name);
+                      setOperation({
+                        ...emptyOperationFields(),
+                        operation_mode: defaultMode,
+                        operation_mode_pick: defaultOperationModePick(name, catalog),
+                      });
+                    }}
+                    required
+                    showDropdownIcon
+                    label="Vehicle category *"
+                  />
+                </div>
               ) : null}
 
               <VehicleOperationFields
                 assetType={editing.asset_type}
                 vehicleCategory={resolvedCategory(editing)}
+                categoryCatalog={catalog}
                 operation={operation}
                 onChange={setOperation}
               />

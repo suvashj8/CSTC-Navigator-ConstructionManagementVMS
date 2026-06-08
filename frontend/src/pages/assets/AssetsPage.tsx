@@ -23,7 +23,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
+import {
+  ASSET_REGISTER_DENSITY,
+  ASSET_REGISTER_FORM,
+  DIALOG_FORM_FIELD_COMPACT,
+  DIALOG_FORM_ROW,
+  DialogForm,
+} from "@/components/ui/dialog-form";
+import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +38,7 @@ import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AssetStatus, AssetType, OwnershipType } from "@/types/domain";
+import { VehicleCategoryPicker } from "@/components/assets/VehicleCategoryPicker";
 import {
   emptyVehicleFields,
   resolveVehicleAsset,
@@ -38,7 +46,16 @@ import {
   VehicleAssetFields,
   type VehicleFieldState,
 } from "@/components/assets/VehicleAssetFields";
-import { usesHourlyOperation } from "@/lib/vehicleOperation";
+import type { OperationMode } from "@/lib/vehicleOperation";
+import { useOperationModes } from "@/hooks/useOperationModes";
+import { useVehicleCategories } from "@/hooks/useVehicleCategories";
+import {
+  defaultOperationModePick,
+  isHourlyFromOperationPick,
+  OPERATION_MODE_OTHER,
+} from "@/lib/operationModeCatalog";
+import { VEHICLE_CATEGORY_OTHER } from "@/lib/vehicleCategory";
+import { VEHICLE_DEPARTMENT_OTHER } from "@/lib/vehicleDepartment";
 
 type FormState = {
   asset_type: AssetType;
@@ -80,6 +97,8 @@ function assetToForm(a: Asset): FormState {
 
 export default function AssetsPage() {
   const qc = useQueryClient();
+  const { catalog } = useVehicleCategories();
+  const { catalog: operationCatalog } = useOperationModes();
   const [page, setPage] = useState(1);
   const perPage = DEFAULT_PER_PAGE;
   const [searchInput, setSearchInput] = useState("");
@@ -152,10 +171,21 @@ export default function AssetsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const resolved = resolveVehicleAsset(form.asset_type, form.vehicle, form.make, form.model);
+    const resolved = resolveVehicleAsset(
+      form.asset_type,
+      form.vehicle,
+      form.make,
+      form.model,
+      catalog,
+      operationCatalog
+    );
     if (form.asset_type === "vehicle") {
       if (!resolved.vehicle_category) {
         toast.error("Select a vehicle category (Car, Bus, Truck, etc.)");
+        return;
+      }
+      if (resolved.vehicle_category === VEHICLE_CATEGORY_OTHER) {
+        toast.error("Choose Other to add a custom category, or pick an existing one");
         return;
       }
       if (!resolved.make || !resolved.model) {
@@ -166,8 +196,31 @@ export default function AssetsPage() {
         toast.error("Select a department");
         return;
       }
-      const hourly = usesHourlyOperation(resolved.vehicle_category ?? "", form.vehicle.operation_mode);
-      if (hourly) {
+      if (resolved.department === VEHICLE_DEPARTMENT_OTHER) {
+        toast.error("Choose Other to add a custom department, or pick an existing one");
+        return;
+      }
+      const pick =
+        form.vehicle.operation_mode_pick ||
+        defaultOperationModePick(resolved.vehicle_category ?? "", catalog);
+      if (pick === OPERATION_MODE_OTHER || !pick.trim()) {
+        toast.error("Choose Other to add a custom operation mode, or pick an existing one");
+        return;
+      }
+      const hourly = isHourlyFromOperationPick(
+        pick,
+        form.vehicle.operation_mode,
+        resolved.vehicle_category ?? "",
+        catalog,
+        operationCatalog
+      );
+      if (resolved.operation_mode === "custom") {
+        const filled = Object.keys(resolved.operation_custom_fields ?? {}).length > 0;
+        if (!filled && (resolved.route_from || resolved.route_to || resolved.operation_place)) {
+          toast.error("Fill in the custom operation fields for this mode");
+          return;
+        }
+      } else if (hourly) {
         if (!resolved.operation_place && !resolved.operation_hours && !resolved.operation_minutes) {
           toast.error("Enter operation place and/or hours for hourly equipment");
           return;
@@ -197,6 +250,8 @@ export default function AssetsPage() {
       bluebook_issued_at: resolved.bluebook_issued_at,
       bluebook_expires_at: resolved.bluebook_expires_at,
       operation_mode: resolved.operation_mode,
+      operation_mode_label: resolved.operation_mode_label,
+      operation_custom_fields: resolved.operation_custom_fields,
       route_from: resolved.route_from,
       route_to: resolved.route_to,
       operation_km: resolved.operation_km,
@@ -369,116 +424,169 @@ export default function AssetsPage() {
       </Card>
 
       <Dialog open={modal !== null} onOpenChange={(o) => !o && (setModal(null), setEditing(null))}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{modal === "edit" ? "Edit asset" : "Register asset"}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="gap-2 p-3 sm:max-w-6xl sm:p-4 lg:max-w-7xl">
+          <DialogHeader className="space-y-0.5 pr-8">
+            <DialogTitle className="text-base">{modal === "edit" ? "Edit asset" : "Register asset"}</DialogTitle>
+            <DialogDescription className="sr-only">
               {form.asset_type === "vehicle"
-                ? "Vehicle registry — category, manufacturer, RTA office, and bluebook details."
-                : "Enter vehicle or equipment details for the construction fleet."}
+                ? "Vehicle registry form"
+                : "Asset registration form"}
             </DialogDescription>
           </DialogHeader>
-          <DialogForm onSubmit={handleSubmit}>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Asset type</Label>
-              <Select
-                value={form.asset_type}
-                onValueChange={(v) => {
-                  const next = v as AssetType;
-                  setForm((f) => ({
-                    ...f,
-                    asset_type: next,
-                    vehicle: next === "vehicle" ? f.vehicle : emptyVehicleFields(),
-                  }));
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="vehicle">Vehicle</SelectItem>
-                  <SelectItem value="equipment">Equipment</SelectItem>
-                  <SelectItem value="tool">Tool</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Reg / Serial no.</Label>
-              <Input value={form.reg_serial_no} onChange={(e) => setField("reg_serial_no", e.target.value)} required />
+          <DialogForm
+            onSubmit={handleSubmit}
+            className={cn(ASSET_REGISTER_FORM, ASSET_REGISTER_DENSITY)}
+          >
+            <div className={DIALOG_FORM_ROW}>
+              <div className={DIALOG_FORM_FIELD_COMPACT}>
+                <Label>Asset type</Label>
+                <Select
+                  value={form.asset_type}
+                  onValueChange={(v) => {
+                    const next = v as AssetType;
+                    setForm((f) => ({
+                      ...f,
+                      asset_type: next,
+                      vehicle: next === "vehicle" ? f.vehicle : emptyVehicleFields(),
+                    }));
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vehicle">Vehicle</SelectItem>
+                    <SelectItem value="equipment">Equipment</SelectItem>
+                    <SelectItem value="tool">Tool</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className={DIALOG_FORM_FIELD_COMPACT}>
+                <Label>Reg / Serial</Label>
+                <Input
+                  value={form.reg_serial_no}
+                  onChange={(e) => setField("reg_serial_no", e.target.value)}
+                  required
+                />
+              </div>
+              {form.asset_type === "vehicle" ? (
+                <VehicleCategoryPicker
+                  value={form.vehicle.vehicle_category}
+                  onCategoryChange={(name, _meta, defaultMode: OperationMode) => {
+                    const modePick = defaultOperationModePick(name, catalog);
+                    setForm((f) => ({
+                      ...f,
+                      vehicle: {
+                        ...f.vehicle,
+                        vehicle_category: name,
+                        operation_mode: defaultMode,
+                        operation_mode_pick: modePick,
+                        operation_mode_label: null,
+                        operation_custom_fields: {},
+                        route_from: "",
+                        route_to: "",
+                        operation_km: "",
+                        operation_place: "",
+                        operation_hours: "",
+                        operation_minutes: "",
+                      },
+                    }));
+                  }}
+                  showDropdownIcon
+                  hideHint
+                  required
+                />
+              ) : null}
             </div>
 
             {form.asset_type === "vehicle" ? (
               <VehicleAssetFields
+                compact
+                year={form.year}
+                onYearChange={(year) => setField("year", year)}
                 vehicle={form.vehicle}
                 onChange={(vehicle) => setForm((f) => ({ ...f, vehicle }))}
               />
             ) : (
               <>
-                <div className={DIALOG_FORM_FIELD}>
-                  <Label>Make (manufacturer)</Label>
+                <div className={DIALOG_FORM_FIELD_COMPACT}>
+                  <Label>Make</Label>
                   <Input value={form.make} onChange={(e) => setField("make", e.target.value)} required />
                 </div>
-                <div className={DIALOG_FORM_FIELD}>
+                <div className={DIALOG_FORM_FIELD_COMPACT}>
                   <Label>Model</Label>
                   <Input value={form.model} onChange={(e) => setField("model", e.target.value)} required />
                 </div>
               </>
             )}
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Year</Label>
-              <Input type="number" value={form.year} onChange={(e) => setField("year", e.target.value)} required />
-            </div>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Ownership</Label>
-              <Select value={form.ownership_type} onValueChange={(v) => setField("ownership_type", v as OwnershipType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="owned">Owned</SelectItem>
-                  <SelectItem value="leased">Leased</SelectItem>
-                  <SelectItem value="rented">Rented</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Work location</Label>
-              <Select value={form.location_id || undefined} onValueChange={(v) => setField("location_id", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.length === 0 ? (
-                    <SelectEmpty message="No locations" />
-                  ) : (
-                    locations.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            {modal === "edit" && (
-              <div className={DIALOG_FORM_FIELD}>
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={(v) => setField("status", v as AssetStatus)}>
+
+            <div className={DIALOG_FORM_ROW}>
+              {form.asset_type !== "vehicle" ? (
+                <div className={DIALOG_FORM_FIELD_COMPACT}>
+                  <Label>Year</Label>
+                  <Input type="number" value={form.year} onChange={(e) => setField("year", e.target.value)} required />
+                </div>
+              ) : null}
+              <div className={DIALOG_FORM_FIELD_COMPACT}>
+                <Label>Ownership</Label>
+                <Select value={form.ownership_type} onValueChange={(v) => setField("ownership_type", v as OwnershipType)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="in_repair">In repair</SelectItem>
-                    <SelectItem value="in_transit">In transit</SelectItem>
-                    <SelectItem value="decommissioned">Decommissioned</SelectItem>
+                    <SelectItem value="owned">Owned</SelectItem>
+                    <SelectItem value="leased">Leased</SelectItem>
+                    <SelectItem value="rented">Rented</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            )}
-            <Button type="submit" className={DIALOG_FORM_FULL} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
+              <div className={DIALOG_FORM_FIELD_COMPACT}>
+                <Label>Work location</Label>
+                <Select value={form.location_id || undefined} onValueChange={(v) => setField("location_id", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.length === 0 ? (
+                      <SelectEmpty message="No locations" />
+                    ) : (
+                      locations.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              {modal === "edit" ? (
+                <div className={DIALOG_FORM_FIELD_COMPACT}>
+                  <Label>Status</Label>
+                  <Select value={form.status} onValueChange={(v) => setField("status", v as AssetStatus)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="in_repair">In repair</SelectItem>
+                      <SelectItem value="in_transit">In transit</SelectItem>
+                      <SelectItem value="decommissioned">Decommissioned</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className={cn(DIALOG_FORM_FIELD_COMPACT, "flex items-end")}>
+                  <Button type="submit" className="h-8 w-full text-xs" disabled={saving}>
+                    {saving ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              )}
+            </div>
+            {modal === "edit" ? (
+              <Button type="submit" className="col-span-full h-8 text-xs sm:ml-auto sm:w-32" disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            ) : null}
           </DialogForm>
         </DialogContent>
       </Dialog>

@@ -54,7 +54,9 @@ export type Asset = {
   bluebook_no?: string | null;
   bluebook_issued_at?: string | null;
   bluebook_expires_at?: string | null;
-  operation_mode?: "km" | "hour" | null;
+  operation_mode?: "km" | "hour" | "custom" | null;
+  operation_mode_label?: string | null;
+  operation_custom_fields?: Record<string, string> | null;
   route_from?: string | null;
   route_to?: string | null;
   operation_km?: number | null;

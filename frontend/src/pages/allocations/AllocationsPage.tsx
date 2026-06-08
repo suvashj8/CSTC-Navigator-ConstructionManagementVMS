@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { createAllocation, listAllocations, transitionAllocation } from "@/api/allocations";
 import { listAssets } from "@/api/assets";
@@ -21,6 +21,7 @@ import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableAutocomplete } from "@/components/ui/searchable-autocomplete";
 import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -32,19 +33,32 @@ import {
   todayNepalDate,
   toDateTimeLocalNpt,
 } from "@/lib/nepalDate";
-import type { AllocState } from "@/types/domain";
+import type { AllocState, WorkLocation } from "@/types/domain";
 
 const emptyAllocationForm = () => {
   const start = todayNepalDate();
   return {
     asset_id: "",
-    from_location_id: "",
-    to_location_id: "",
+    from_location: "",
+    to_location: "",
     driver_id: "",
     start_at: nowNepalDateTimeLocal(),
     expected_return_at: toDateTimeLocalNpt(addDaysToDateString(start, 7)),
   };
 };
+
+function allocationLocationFields(
+  value: string,
+  locations: WorkLocation[],
+  side: "from" | "to"
+): { from_location_id?: string; from_location_name?: string; to_location_id?: string; to_location_name?: string } {
+  const trimmed = value.trim();
+  const match = locations.find((l) => l.name.toLowerCase() === trimmed.toLowerCase());
+  if (match) {
+    return side === "from" ? { from_location_id: match.id } : { to_location_id: match.id };
+  }
+  return side === "from" ? { from_location_name: trimmed } : { to_location_name: trimmed };
+}
 
 const states: { value: AllocState | "all"; label: string }[] = [
   { value: "all", label: "All states" },
@@ -89,6 +103,7 @@ export default function AllocationsPage() {
 
   const assets = assetsData?.rows ?? [];
   const drivers = (usersData?.rows ?? []).filter((u) => u.role === "driver");
+  const locationNames = useMemo(() => locations.map((l) => l.name), [locations]);
 
   const transitionMut = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "approve" | "dispatch" | "receive" | "release" | "cancel" }) =>
@@ -106,6 +121,7 @@ export default function AllocationsPage() {
     onSuccess: () => {
       toast.success("Allocation request created");
       qc.invalidateQueries({ queryKey: ["allocations"] });
+      qc.invalidateQueries({ queryKey: ["locations"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setOpen(false);
       setForm(emptyAllocationForm());
@@ -277,18 +293,25 @@ export default function AllocationsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New allocation request</DialogTitle>
-            <DialogDescription>Request transfer of an asset to another work location.</DialogDescription>
+            <DialogDescription>
+              Request transfer of an asset. Pick a registered site or type any from/to place (e.g. client yard, highway
+              point).
+            </DialogDescription>
           </DialogHeader>
           <DialogForm
             onSubmit={(e) => {
               e.preventDefault();
+              if (!form.from_location.trim() || !form.to_location.trim()) {
+                toast.error("Enter both from and to locations");
+                return;
+              }
               createMut.mutate({
                 asset_id: form.asset_id,
-                from_location_id: form.from_location_id,
-                to_location_id: form.to_location_id,
                 driver_id: form.driver_id,
                 start_date: dateTimeLocalToApiDate(form.start_at),
                 expected_return: dateTimeLocalToApiDate(form.expected_return_at),
+                ...allocationLocationFields(form.from_location, locations, "from"),
+                ...allocationLocationFields(form.to_location, locations, "to"),
               });
             }}
           >
@@ -313,47 +336,25 @@ export default function AllocationsPage() {
             </div>
             <div className={DIALOG_FORM_FIELD}>
               <Label>From location</Label>
-                <Select
-                  value={form.from_location_id || undefined}
-                  onValueChange={(v) => setForm((f) => ({ ...f, from_location_id: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="From" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.length === 0 ? (
-                      <SelectEmpty message="No locations" />
-                    ) : (
-                      locations.map((l) => (
-                        <SelectItem key={l.id} value={l.id}>
-                          {l.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+              <SearchableAutocomplete
+                value={form.from_location}
+                onChange={(v) => setForm((f) => ({ ...f, from_location: v }))}
+                options={locationNames}
+                placeholder="Site or custom place"
+                required
+              />
+              <p className="text-xs text-muted-foreground">Registered site or type a custom origin</p>
             </div>
             <div className={DIALOG_FORM_FIELD}>
               <Label>To location</Label>
-                <Select
-                  value={form.to_location_id || undefined}
-                  onValueChange={(v) => setForm((f) => ({ ...f, to_location_id: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="To" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.length === 0 ? (
-                      <SelectEmpty message="No locations" />
-                    ) : (
-                      locations.map((l) => (
-                        <SelectItem key={l.id} value={l.id}>
-                          {l.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+              <SearchableAutocomplete
+                value={form.to_location}
+                onChange={(v) => setForm((f) => ({ ...f, to_location: v }))}
+                options={locationNames}
+                placeholder="Site or custom place"
+                required
+              />
+              <p className="text-xs text-muted-foreground">Registered site or type a custom destination</p>
             </div>
             <div className={DIALOG_FORM_FIELD}>
               <Label>Driver</Label>
