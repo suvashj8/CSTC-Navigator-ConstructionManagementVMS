@@ -1,8 +1,21 @@
 import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
+import PDFDocument from "pdfkit";
 import type { Pool } from "pg";
 import { randomUUID } from "crypto";
+
+const REPORT_TITLES: Record<string, string> = {
+  "location-assets": "Location-wise assets",
+  "insurance-expiry": "Insurance expiry",
+  "driver-license-expiry": "Driver license expiry",
+  "fleet-utilization": "Fleet utilization",
+  "overdue-allocations": "Overdue allocations",
+};
+
+function formatColumnHeader(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export async function runQuery(pool: Pool, reportType: string): Promise<Record<string, unknown>[]> {
   let q: string;
@@ -60,23 +73,78 @@ export async function exportPdf(dir: string, reportType: string, rows: Record<st
   const name = `${reportType}-${randomUUID().slice(0, 8)}.pdf`;
   const filePath = path.join(dir, name);
   await fs.promises.mkdir(dir, { recursive: true, mode: 0o755 });
-  let content = `VMS Report: ${reportType}\n\n`;
+
+  const title = REPORT_TITLES[reportType] ?? reportType;
+  const doc = new PDFDocument({ margin: 48, size: "A4" });
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  doc.fontSize(18).font("Helvetica-Bold").text(`Navigator VMS — ${title}`);
+  doc.moveDown(0.4);
+  doc.fontSize(10).font("Helvetica").fillColor("#555555").text(`Generated ${new Date().toLocaleString()}`);
+  doc.moveDown(1);
+  doc.fillColor("#000000");
+
   if (rows.length === 0) {
-    content += "No data\n";
+    doc.fontSize(12).text("No data returned for this report.");
   } else {
+    const keys = Object.keys(rows[0]);
+    const headers = keys.map(formatColumnHeader);
+    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const colWidth = contentWidth / keys.length;
+    const rowHeight = 18;
+    const left = doc.page.margins.left;
+
+    const drawHeader = (y: number) => {
+      doc.fontSize(10).font("Helvetica-Bold").fillColor("#111111");
+      let x = left;
+      for (const header of headers) {
+        doc.text(header, x + 2, y, { width: colWidth - 4, lineBreak: false });
+        x += colWidth;
+      }
+      doc
+        .moveTo(left, y + rowHeight - 4)
+        .lineTo(left + contentWidth, y + rowHeight - 4)
+        .strokeColor("#cccccc")
+        .stroke();
+    };
+
+    let y = doc.y;
+    drawHeader(y);
+    y += rowHeight;
+    doc.font("Helvetica").fillColor("#000000");
+
     for (const row of rows) {
-      const line = Object.entries(row)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join("  ");
-      content += line + "\n";
+      if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        y = doc.page.margins.top;
+        drawHeader(y);
+        y += rowHeight;
+        doc.font("Helvetica").fillColor("#000000");
+      }
+      let x = left;
+      doc.fontSize(9);
+      for (const key of keys) {
+        doc.text(String(row[key] ?? ""), x + 2, y, { width: colWidth - 4, lineBreak: false });
+        x += colWidth;
+      }
+      y += rowHeight;
     }
+    doc.y = y;
   }
-  await fs.promises.writeFile(filePath, content, "utf8");
+
+  doc.end();
+  await new Promise<void>((resolve, reject) => {
+    stream.on("finish", () => resolve());
+    stream.on("error", reject);
+  });
+
   return { path: filePath, name };
 }
 
-export function rowsToJson(rows: Record<string, unknown>[]): Buffer {
-  return Buffer.from(JSON.stringify(rows));
+/** Serialize report rows for the `report_jobs.result` JSONB column. */
+export function rowsToJson(rows: Record<string, unknown>[]): string {
+  return JSON.stringify(rows);
 }
 
 export async function findCachedJob(pool: Pool, hash: string): Promise<string | null> {

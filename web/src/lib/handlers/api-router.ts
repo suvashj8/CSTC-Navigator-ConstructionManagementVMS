@@ -938,12 +938,8 @@ async function getReportJob(pool: import("pg").Pool, id: string) {
     created_at: r.created_at,
     completed_at: r.completed_at,
   };
-  if (r.result) {
-    try {
-      job.result = JSON.parse(Buffer.from(r.result).toString("utf8"));
-    } catch {
-      job.result = r.result;
-    }
+  if (r.result != null) {
+    job.result = r.result;
   }
   if (r.error_message) job.error_message = r.error_message;
   if (r.file_name) job.file_name = r.file_name;
