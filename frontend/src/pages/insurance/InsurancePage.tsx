@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import { PaginationBar } from "@/components/layout/pagination-bar";
+import { formatNepalDate, toDateInputValue } from "@/lib/nepalDate";
+import { cn } from "@/lib/utils";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
 import { toast } from "sonner";
 import { createInsurance, listInsurance, updateInsurance } from "@/api/insurance";
@@ -15,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,8 +69,8 @@ function policyToForm(p: InsurancePolicy): InsuranceForm {
     coverage_type: p.coverage_type,
     insured_value: String(p.insured_value),
     premium_amount: String(p.premium_amount),
-    start_date: p.start_date,
-    expiry_date: p.expiry_date,
+    start_date: toDateInputValue(p.start_date),
+    expiry_date: toDateInputValue(p.expiry_date),
     status: p.status,
   };
 }
@@ -224,7 +227,7 @@ export default function InsurancePage() {
                     subtitle={p.policy_no}
                     fields={[
                       { label: "Insurer", value: p.insurer_name },
-                      { label: "Expiry", value: p.expiry_date },
+                      { label: "Expiry", value: formatNepalDate(p.expiry_date) },
                       {
                         label: "Status",
                         value: (
@@ -278,7 +281,7 @@ export default function InsurancePage() {
                       <TableCell>{p.insurer_name}</TableCell>
                       <TableCell className="capitalize">{p.coverage_type.replace(/_/g, " ")}</TableCell>
                       <TableCell>{p.insured_value.toLocaleString()}</TableCell>
-                      <TableCell>{p.expiry_date}</TableCell>
+                      <TableCell>{formatNepalDate(p.expiry_date)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusBadgeClass(p.status)}>
                           {p.status}
@@ -296,7 +299,7 @@ export default function InsurancePage() {
       </Card>
 
       <Dialog open={modal !== null} onOpenChange={(o) => !o && closeModal()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{modal === "edit" ? "Edit insurance policy" : "Add insurance policy"}</DialogTitle>
             <DialogDescription>
@@ -305,8 +308,8 @@ export default function InsurancePage() {
                 : "Link a policy to an asset. Expiry dates trigger dashboard alerts and scheduled notifications."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+          <DialogForm onSubmit={handleSubmit}>
+            <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
               <Label>Asset</Label>
               {modal === "edit" ? (
                 <Input value={editing?.asset_label ?? editing?.asset_id ?? ""} disabled />
@@ -329,7 +332,7 @@ export default function InsurancePage() {
                 </Select>
               )}
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Policy number</Label>
               <Input
                 placeholder="POL-2026-00001"
@@ -338,7 +341,7 @@ export default function InsurancePage() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Insurer</Label>
               <Input
                 placeholder="e.g. Sagarmatha Insurance"
@@ -346,7 +349,7 @@ export default function InsurancePage() {
                 onChange={(e) => setField("insurer_name", e.target.value)}
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Coverage type</Label>
               <Select
                 value={form.coverage_type}
@@ -364,7 +367,7 @@ export default function InsurancePage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Status</Label>
               <Select
                 value={form.status}
@@ -382,7 +385,7 @@ export default function InsurancePage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Insured value (NPR)</Label>
               <Input
                 inputMode="decimal"
@@ -390,7 +393,7 @@ export default function InsurancePage() {
                 onChange={(e) => setField("insured_value", e.target.value.replace(/[^\d.]/g, ""))}
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Premium (NPR)</Label>
               <Input
                 inputMode="decimal"
@@ -398,7 +401,7 @@ export default function InsurancePage() {
                 onChange={(e) => setField("premium_amount", e.target.value.replace(/[^\d.]/g, ""))}
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Start date</Label>
               <Input
                 type="date"
@@ -406,7 +409,7 @@ export default function InsurancePage() {
                 onChange={(e) => setField("start_date", e.target.value)}
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Expiry date</Label>
               <Input
                 type="date"
@@ -415,10 +418,10 @@ export default function InsurancePage() {
                 required
               />
             </div>
-            <Button type="submit" className="sm:col-span-2" disabled={saving}>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={saving}>
               {saving ? "Saving…" : modal === "edit" ? "Save changes" : "Create policy"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </PageShell>

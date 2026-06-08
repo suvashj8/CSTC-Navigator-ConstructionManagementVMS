@@ -1,13 +1,17 @@
 import type { Asset } from "@/types/domain";
-import { usesHourlyOperation } from "@/lib/vehicleOperation";
+import { usesHourlyOperationForAsset } from "@/lib/assetOperation";
+import type { OperationMode } from "@/lib/vehicleOperation";
+
+function isHourlyAsset(asset: Asset): boolean {
+  return usesHourlyOperationForAsset(
+    asset.asset_type,
+    asset.vehicle_category ?? "",
+    (asset.operation_mode as OperationMode) ?? "km"
+  );
+}
 
 export function formatOperationSummary(asset: Asset): string {
-  if (asset.asset_type !== "vehicle") return "—";
-  const category = asset.vehicle_category ?? "";
-  const mode = asset.operation_mode ?? "km";
-  const hourly = usesHourlyOperation(category, mode);
-
-  if (hourly) {
+  if (isHourlyAsset(asset)) {
     const place = asset.operation_place?.trim();
     const h = asset.operation_hours ?? 0;
     const m = asset.operation_minutes ?? 0;
@@ -26,7 +30,5 @@ export function formatOperationSummary(asset: Asset): string {
 }
 
 export function operationModeLabel(asset: Asset): string {
-  if (asset.asset_type !== "vehicle") return "—";
-  const hourly = usesHourlyOperation(asset.vehicle_category ?? "", asset.operation_mode ?? "km");
-  return hourly ? "Hourly" : "Route + KM";
+  return isHourlyAsset(asset) ? "Hourly" : "Route + KM";
 }

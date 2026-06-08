@@ -6,6 +6,8 @@ import { createDriver, listDrivers } from "@/api/drivers";
 import { listLocations } from "@/api/locations";
 import { PageShell, FilterRow } from "@/components/layout/page-shell";
 import { PaginationBar } from "@/components/layout/pagination-bar";
+import { formatNepalDate } from "@/lib/nepalDate";
+import { cn } from "@/lib/utils";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
 import { MobileCard, MobileCardList } from "@/components/layout/mobile-card";
 import { ResponsiveTable } from "@/components/layout/responsive-table";
@@ -17,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -156,7 +159,7 @@ export default function DriversPage() {
                     subtitle={d.license_no}
                     fields={[
                       { label: "Class", value: d.license_class },
-                      { label: "Expiry", value: d.expiry_date },
+                      { label: "Expiry", value: formatNepalDate(d.expiry_date) },
                       { label: "Status", value: <LicenseStatusBadge status={d.status} /> },
                     ]}
                   />
@@ -200,8 +203,8 @@ export default function DriversPage() {
                       <TableCell>{d.email}</TableCell>
                       <TableCell className="font-mono text-sm">{d.license_no}</TableCell>
                       <TableCell>{d.license_class}</TableCell>
-                      <TableCell>{d.issue_date}</TableCell>
-                      <TableCell>{d.expiry_date}</TableCell>
+                      <TableCell>{formatNepalDate(d.issue_date)}</TableCell>
+                      <TableCell>{formatNepalDate(d.expiry_date)}</TableCell>
                       <TableCell>
                         <LicenseStatusBadge status={d.status} />
                       </TableCell>
@@ -216,23 +219,23 @@ export default function DriversPage() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Add driver</DialogTitle>
             <DialogDescription>
               Creates a driver user account and license profile. Expiry dates feed dashboard and notification alerts.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+          <DialogForm onSubmit={handleSubmit}>
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Full name</Label>
               <Input value={form.name} onChange={(e) => setField("name", e.target.value)} required />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} required />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Password</Label>
               <Input
                 type="password"
@@ -241,7 +244,7 @@ export default function DriversPage() {
                 onChange={(e) => setField("password", e.target.value)}
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Work location</Label>
               <Select
                 value={form.location_id || "none"}
@@ -265,11 +268,11 @@ export default function DriversPage() {
               </Select>
             </div>
 
-            <div className="space-y-2 sm:col-span-2 border-t pt-4">
+            <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL, "border-t pt-4")}>
               <p className="text-sm font-medium">Driving license</p>
             </div>
 
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>License number</Label>
               <Input
                 placeholder="e.g. 01-06-0023456"
@@ -278,7 +281,7 @@ export default function DriversPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>License class</Label>
               <Select value={form.license_class} onValueChange={(v) => setField("license_class", v)}>
                 <SelectTrigger>
@@ -293,7 +296,7 @@ export default function DriversPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Issue date</Label>
               <Input
                 type="date"
@@ -302,7 +305,7 @@ export default function DriversPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Expiry date</Label>
               <Input
                 type="date"
@@ -311,7 +314,7 @@ export default function DriversPage() {
                 required
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
               <Label>Endorsements (optional)</Label>
               <Input
                 placeholder="e.g. Heavy vehicle"
@@ -320,10 +323,10 @@ export default function DriversPage() {
               />
             </div>
 
-            <Button type="submit" className="sm:col-span-2" disabled={createMut.isPending}>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={createMut.isPending}>
               {createMut.isPending ? "Saving…" : "Create driver"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </PageShell>

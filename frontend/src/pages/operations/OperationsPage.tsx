@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Route, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { listAssets, updateAsset, type Asset } from "@/api/assets";
 import { FilterRow, PageShell } from "@/components/layout/page-shell";
@@ -12,49 +12,70 @@ import {
   VehicleOperationFields,
   type OperationFieldState,
 } from "@/components/assets/VehicleOperationFields";
-import { resolveVehicleAsset, vehicleFieldsFromAsset } from "@/components/assets/VehicleAssetFields";
+import { vehicleFieldsFromAsset } from "@/components/assets/VehicleAssetFields";
+import { VEHICLE_CATEGORIES } from "@/data/vehicleCatalog";
+import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/guards/ProtectedRoute";
+import {
+  assetTypeLabel,
+  defaultOperationModeForAsset,
+  formatAssetTypeDetail,
+  matchesOperationModeFilter,
+  resolveAssetOperation,
+} from "@/lib/assetOperation";
 import { formatOperationSummary, operationModeLabel } from "@/lib/operationDisplay";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
-import { usesHourlyOperation } from "@/lib/vehicleOperation";
+import { cn } from "@/lib/utils";
+import { defaultOperationMode, usesHourlyOperation } from "@/lib/vehicleOperation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { AssetType } from "@/types/domain";
 
 export default function OperationsPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | AssetType>("all");
   const [modeFilter, setModeFilter] = useState<"all" | "km" | "hour">("all");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
+  const [editCategory, setEditCategory] = useState("");
   const [operation, setOperation] = useState<OperationFieldState>(emptyOperationFields());
 
   useEffect(() => {
     setPage(1);
-  }, [search, modeFilter]);
+  }, [search, modeFilter, typeFilter]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["assets", "operations", page, search, modeFilter],
+    queryKey: ["assets", "operations", search, typeFilter],
     queryFn: () =>
       listAssets({
-        page,
-        per_page: DEFAULT_PER_PAGE,
+        page: 1,
+        per_page: 100,
         search: search || undefined,
-        status: "active",
-        asset_type: "vehicle",
-        operation_mode: modeFilter === "all" ? undefined : modeFilter,
+        operational_only: true,
+        asset_type: typeFilter === "all" ? undefined : typeFilter,
       }),
   });
 
-  const vehicles = data?.rows ?? [];
-  const total = data?.total ?? 0;
+  const filteredAssets = useMemo(() => {
+    const rows = data?.rows ?? [];
+    return rows.filter((a) => matchesOperationModeFilter(a, modeFilter));
+  }, [data?.rows, modeFilter]);
+
+  const total = filteredAssets.length;
+  const assets = useMemo(() => {
+    const start = (page - 1) * DEFAULT_PER_PAGE;
+    return filteredAssets.slice(start, start + DEFAULT_PER_PAGE);
+  }, [filteredAssets, page]);
 
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Partial<Asset> }) => updateAsset(id, body),
@@ -69,9 +90,11 @@ export default function OperationsPage() {
 
   const openRecord = (asset: Asset) => {
     const vf = vehicleFieldsFromAsset(asset);
+    const category = asset.vehicle_category ?? "";
     setEditing(asset);
+    setEditCategory(category);
     setOperation({
-      operation_mode: vf.operation_mode,
+      operation_mode: vf.operation_mode || defaultOperationModeForAsset(asset),
       route_from: vf.route_from,
       route_to: vf.route_to,
       operation_km: vf.operation_km,
@@ -82,17 +105,27 @@ export default function OperationsPage() {
     setOpen(true);
   };
 
+  const resolvedCategory = (asset: Asset | null) =>
+    asset?.vehicle_category?.trim() || editCategory.trim();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
-    const category = editing.vehicle_category ?? "";
-    const resolved = resolveVehicleAsset(
-      "vehicle",
-      { ...vehicleFieldsFromAsset(editing), ...operation },
-      editing.make,
-      editing.model
-    );
-    const hourly = usesHourlyOperation(category, operation.operation_mode);
+
+    if (editing.asset_type === "vehicle") {
+      const category = resolvedCategory(editing);
+      if (!category) {
+        toast.error("Select a vehicle category before saving the operation");
+        return;
+      }
+    }
+
+    const category = resolvedCategory(editing);
+    const resolved = resolveAssetOperation(editing, category, operation);
+    const hourly =
+      editing.asset_type !== "vehicle"
+        ? true
+        : usesHourlyOperation(category, operation.operation_mode);
 
     if (hourly) {
       if (!resolved.operation_place && !resolved.operation_hours && !resolved.operation_minutes) {
@@ -117,7 +150,7 @@ export default function OperationsPage() {
         ownership_type: editing.ownership_type,
         status: editing.status,
         location_id: editing.location_id,
-        vehicle_category: editing.vehicle_category,
+        vehicle_category: resolved.vehicle_category,
         department: editing.department,
         rta_office: editing.rta_office,
         alert_cell_number: editing.alert_cell_number,
@@ -144,20 +177,37 @@ export default function OperationsPage() {
 
   return (
     <PageShell
-      title="Vehicle operations"
-      description="Record route-based trips (From → To + KM) or hourly equipment usage (place + Hr/Min), per VMS operation tracking."
+      title="Asset operations"
+      description="Track how each asset is being used — route trips (From → To + KM) for vehicles, or place + Hr/Min for equipment and tools."
     >
       <FilterRow>
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search reg no. or make"
+            placeholder="Search reg no., make, or model"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && runSearch()}
             className="pl-9"
           />
         </div>
+        <Select
+          value={typeFilter}
+          onValueChange={(v) => {
+            setTypeFilter(v as typeof typeFilter);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-[150px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All assets</SelectItem>
+            <SelectItem value="vehicle">Vehicles</SelectItem>
+            <SelectItem value="equipment">Equipment</SelectItem>
+            <SelectItem value="tool">Tools</SelectItem>
+          </SelectContent>
+        </Select>
         <Select
           value={modeFilter}
           onValueChange={(v) => {
@@ -166,7 +216,7 @@ export default function OperationsPage() {
           }}
         >
           <SelectTrigger className="w-[160px]">
-            <SelectValue />
+            <SelectValue placeholder="All modes" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All modes</SelectItem>
@@ -182,29 +232,30 @@ export default function OperationsPage() {
       <Card>
         <CardContent className="p-0">
           <ResponsiveTable
-            scrollMinClass="min-w-[48rem]"
+            scrollMinClass="min-w-[52rem]"
             mobile={
               <MobileCardList className="p-3">
                 {isLoading &&
                   Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-lg" />)}
-                {!isLoading && vehicles.length === 0 && (
-                  <p className="py-8 text-center text-sm text-muted-foreground">No active vehicles found.</p>
+                {!isLoading && assets.length === 0 && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">No active assets found.</p>
                 )}
-                {vehicles.map((v) => (
+                {assets.map((a) => (
                   <MobileCard
-                    key={v.id}
-                    title={v.reg_serial_no}
-                    subtitle={`${v.make} ${v.model} · ${v.vehicle_category ?? "Vehicle"}`}
+                    key={a.id}
+                    title={a.reg_serial_no}
+                    subtitle={`${a.make} ${a.model} · ${formatAssetTypeDetail(a)}`}
                     fields={[
-                      { label: "Mode", value: operationModeLabel(v) },
-                      { label: "Operation", value: formatOperationSummary(v) },
-                      { label: "Site", value: v.location_name ?? "—" },
+                      { label: "Type", value: assetTypeLabel(a.asset_type) },
+                      { label: "Mode", value: operationModeLabel(a) },
+                      { label: "Operation", value: formatOperationSummary(a) },
+                      { label: "Site", value: a.location_name ?? "—" },
                     ]}
                     actions={
                       <PermissionGate permission="manage_assets">
-                        <Button size="sm" variant="outline" onClick={() => openRecord(v)}>
+                        <Button size="sm" variant="outline" onClick={() => openRecord(a)}>
                           <Pencil className="h-3.5 w-3.5" />
-                          Record
+                          {formatOperationSummary(a) === "Not recorded" ? "Add operation" : "Edit"}
                         </Button>
                       </PermissionGate>
                     }
@@ -216,97 +267,178 @@ export default function OperationsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>Category</TableHead>
+                    <TableHead>Asset</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Mode</TableHead>
                     <TableHead>Current operation</TableHead>
                     <TableHead>Location</TableHead>
-                    <TableHead className="w-[100px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading &&
                     Array.from({ length: DEFAULT_PER_PAGE }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 6 }).map((__, j) => (
+                        {Array.from({ length: 5 }).map((__, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
                         ))}
                       </TableRow>
                     ))}
-                  {!isLoading && vehicles.length === 0 && (
+                  {!isLoading && assets.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
-                        No active vehicles found.
+                      <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                        No active assets found.
                       </TableCell>
                     </TableRow>
                   )}
-                  {vehicles.map((v) => (
-                    <TableRow key={v.id}>
+                  {assets.map((a) => (
+                    <TableRow key={a.id}>
                       <TableCell>
-                        <div className="font-medium">{v.reg_serial_no}</div>
+                        <div className="font-medium">{a.reg_serial_no}</div>
                         <div className="text-xs text-muted-foreground">
-                          {v.make} {v.model}
+                          {a.make} {a.model}
                         </div>
                       </TableCell>
-                      <TableCell>{v.vehicle_category ?? "—"}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="gap-1">
-                          <Route className="h-3 w-3" />
-                          {operationModeLabel(v)}
-                        </Badge>
+                        <div>{assetTypeLabel(a.asset_type)}</div>
+                        {a.asset_type === "vehicle" && a.vehicle_category && (
+                          <div className="text-xs text-muted-foreground">{a.vehicle_category}</div>
+                        )}
                       </TableCell>
-                      <TableCell className="wrap max-w-[14rem]">{formatOperationSummary(v)}</TableCell>
-                      <TableCell>{v.location_name ?? "—"}</TableCell>
                       <TableCell>
-                        <PermissionGate permission="manage_assets">
-                          <Button size="sm" variant="ghost" onClick={() => openRecord(v)}>
-                            <Pencil className="h-4 w-4" />
-                            Record
-                          </Button>
+                        <PermissionGate
+                          permission="manage_assets"
+                          fallback={
+                            <Badge variant="outline" className="gap-1">
+                              <Route className="h-3 w-3" />
+                              {operationModeLabel(a)}
+                            </Badge>
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() => openRecord(a)}
+                            className="inline-flex rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                            title="Set mode and record operation"
+                          >
+                            <Badge variant="outline" className="cursor-pointer gap-1 hover:bg-muted">
+                              <Route className="h-3 w-3" />
+                              {operationModeLabel(a)}
+                            </Badge>
+                          </button>
                         </PermissionGate>
                       </TableCell>
+                      <TableCell className="max-w-[16rem]">
+                        <PermissionGate
+                          permission="manage_assets"
+                          fallback={<span className="text-muted-foreground">{formatOperationSummary(a)}</span>}
+                        >
+                          {formatOperationSummary(a) === "Not recorded" ? (
+                            <Button
+                              type="button"
+                              variant="link"
+                              className="h-auto p-0 text-primary"
+                              onClick={() => openRecord(a)}
+                            >
+                              Add operation
+                            </Button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openRecord(a)}
+                              className="wrap text-left hover:underline"
+                              title="Edit operation"
+                            >
+                              {formatOperationSummary(a)}
+                            </button>
+                          )}
+                        </PermissionGate>
+                      </TableCell>
+                      <TableCell>{a.location_name ?? "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             }
           />
-          <PaginationBar
-            page={page}
-            total={total}
-            label="vehicles"
-            onPageChange={setPage}
-          />
+          <PaginationBar page={page} total={total} label="assets" onPageChange={setPage} />
         </CardContent>
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Record operation</DialogTitle>
+            <DialogTitle>
+              {editing && formatOperationSummary(editing) === "Not recorded"
+                ? "Add operation"
+                : "Record operation"}
+            </DialogTitle>
             <DialogDescription>
               {editing
-                ? `${editing.reg_serial_no} — ${editing.make} ${editing.model}`
-                : "Update trip or hourly usage for this vehicle."}
+                ? "Set how this asset is being operated and save the current usage."
+                : "Update trip or hourly usage for this asset."}
             </DialogDescription>
           </DialogHeader>
           {editing && (
-            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1 sm:col-span-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">Category: </span>
-                <span className="font-medium">{editing.vehicle_category ?? "—"}</span>
+            <DialogForm onSubmit={handleSubmit} className="overflow-visible lg:grid-cols-4">
+              <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL, "rounded-lg border bg-muted/30 px-3 py-3 text-sm")}>
+                <div className="font-medium">
+                  {editing.reg_serial_no} — {editing.make} {editing.model}
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                  <span>Type: {assetTypeLabel(editing.asset_type)}</span>
+                  {editing.asset_type === "vehicle" && editing.vehicle_category && (
+                    <span>Category: {editing.vehicle_category}</span>
+                  )}
+                  <span>Site: {editing.location_name ?? "—"}</span>
+                </div>
               </div>
+
+              {editing.asset_type === "vehicle" && !editing.vehicle_category ? (
+                <>
+                  <div className={DIALOG_FORM_FIELD}>
+                    <Label>Vehicle category *</Label>
+                    <Select
+                      value={editCategory || undefined}
+                      onValueChange={(v) => {
+                        setEditCategory(v);
+                        setOperation((prev) => ({
+                          ...emptyOperationFields(),
+                          operation_mode: defaultOperationMode(v),
+                        }));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category (e.g. Truck, Dozer)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VEHICLE_CATEGORIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className={cn(DIALOG_FORM_FIELD, "sm:col-span-2 flex items-end pb-2")}>
+                    <p className="text-xs text-muted-foreground">
+                      Required for vehicles before recording route or hourly operation.
+                    </p>
+                  </div>
+                </>
+              ) : null}
+
               <VehicleOperationFields
-                vehicleCategory={editing.vehicle_category ?? ""}
+                assetType={editing.asset_type}
+                vehicleCategory={resolvedCategory(editing)}
                 operation={operation}
                 onChange={setOperation}
               />
-              <Button type="submit" className="sm:col-span-2" disabled={updateMut.isPending}>
+              <Button type="submit" className={DIALOG_FORM_FULL} disabled={updateMut.isPending}>
                 {updateMut.isPending ? "Saving…" : "Save operation"}
               </Button>
-            </form>
+            </DialogForm>
           )}
         </DialogContent>
       </Dialog>

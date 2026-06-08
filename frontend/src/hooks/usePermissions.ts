@@ -21,6 +21,7 @@ type Permission =
   | "dispatch_allocation"
   | "manage_insurance"
   | "manage_suppliers"
+  | "manage_fuel"
   | "view_reports"
   | "tenant_settings";
 
@@ -34,6 +35,7 @@ const PERMISSIONS: Record<Permission, UserRole[]> = {
   dispatch_allocation: ["super_user", "admin", "manager", "supervisor"],
   manage_insurance: ["super_user", "admin", "manager"],
   manage_suppliers: ["super_user", "admin", "manager"],
+  manage_fuel: ["super_user", "admin", "manager", "supervisor"],
   view_reports: ["super_user", "admin", "manager", "supervisor"],
   tenant_settings: ["super_user", "admin"],
 };

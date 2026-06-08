@@ -6,6 +6,7 @@ import { createSupplier, listSuppliers, updateSupplier } from "@/api/suppliers";
 import { FilterRow, PageShell } from "@/components/layout/page-shell";
 import { PaginationBar } from "@/components/layout/pagination-bar";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
+import { cn } from "@/lib/utils";
 import { MobileCard, MobileCardList } from "@/components/layout/mobile-card";
 import { ResponsiveTable } from "@/components/layout/responsive-table";
 import { PermissionGate } from "@/guards/ProtectedRoute";
@@ -14,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -269,7 +271,7 @@ export default function SuppliersPage() {
       </Card>
 
       <Dialog open={modal !== null} onOpenChange={(o) => !o && closeModal()}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{modal === "edit" ? "Edit supplier" : "Add supplier"}</DialogTitle>
             <DialogDescription>
@@ -278,12 +280,12 @@ export default function SuppliersPage() {
                 : "Register vendors for repairs, fuel, parts, and rentals used across your fleet operations."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+          <DialogForm onSubmit={handleSubmit}>
+            <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
               <Label>Company name</Label>
               <Input value={form.name} onChange={(e) => setField("name", e.target.value)} required />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Category</Label>
               <Select value={form.category} onValueChange={(v) => setField("category", v as SupplierCategory)}>
                 <SelectTrigger>
@@ -298,7 +300,7 @@ export default function SuppliersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Rating (1–5)</Label>
               <Select value={form.rating} onValueChange={(v) => setField("rating", v)}>
                 <SelectTrigger>
@@ -313,29 +315,29 @@ export default function SuppliersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Contact person</Label>
               <Input value={form.contact_name} onChange={(e) => setField("contact_name", e.target.value)} />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Phone</Label>
               <Input value={form.phone} onChange={(e) => setField("phone", e.target.value)} />
             </div>
-            <div className="flex items-center justify-between rounded-lg border p-3 sm:col-span-2">
+            <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL, "flex items-center justify-between rounded-lg border p-3")}>
               <div>
                 <Label>Preferred vendor</Label>
                 <p className="text-xs text-muted-foreground">Mark for quick selection in repairs and procurement</p>
               </div>
               <Switch checked={form.is_preferred} onCheckedChange={(v) => setField("is_preferred", v)} />
             </div>
-            <Button type="submit" className="sm:col-span-2" disabled={saving}>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={saving}>
               {saving ? "Saving…" : modal === "edit" ? "Save changes" : "Create supplier"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </PageShell>

@@ -32,7 +32,7 @@
 └───────────────┬─────────────────────────┬─────────────────┘
                 │                         │
                 ▼                         ▼
-        PostgreSQL (:5432)         Node worker (cron)
+        PostgreSQL (:15432 host)   Node worker (cron)
         vms_main + vms_tenant_*    Daily expiry scans
 ```
 
@@ -40,7 +40,7 @@
 |---------|------|------|
 | Frontend UI | `5173` | Tenant & platform console |
 | Next.js API | `3000` | All `/api/v1/*` + `/health` |
-| PostgreSQL | `5432` | Main registry + tenant databases |
+| PostgreSQL (Docker dev) | `15432` | Main registry + tenant DBs on host ([`5432` inside container]) |
 | Redis | `6379` | Optional (health check) |
 
 The Vite dev server proxies `/api` to Next.js on port **3000** by default. In production, set `VITE_API_URL` to your deployed Next.js host.
@@ -75,7 +75,7 @@ Key variables (`web/.env.local`):
 
 | Variable | Purpose |
 |----------|---------|
-| `MAIN_DB_*` | Platform registry database |
+| `MAIN_DB_*` | Platform registry database (`MAIN_DB_PORT=15432` for local Docker) |
 | `JWT_SECRET` | HS256 token signing (change in production) |
 | `SEED_ON_STARTUP` | `true` seeds demo tenant on first API start |
 | `EXPORT_DIR` | Report export files directory |
@@ -92,20 +92,37 @@ VITE_API_URL=
 **Docker Desktop must be running** for `docker:up` and `dev:full`.
 
 ```powershell
-npm run dev:full
+npm run dev:full:host
 ```
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev:full` | Docker (Postgres, Redis, API, worker) + UI |
+| `npm run dev:full:host` | **Recommended** — DB + seed + API + UI (LAN-friendly) |
+| `npm run dev:full` | Same stack, localhost only |
 | `npm run dev:next` | Same as `dev:full` |
-| `npm run dev` | UI only — run `npm run docker:up` separately |
-| `npm run dev:host` | UI on LAN for mobile device testing |
-| `npm run docker:up` | Postgres, Redis, Next.js API, expiry worker |
+| `npm run docker:infra` | Start Postgres + Redis only (port **15432**) |
+| `npm run seed` | Reset all demo accounts (admin, manager, driver, etc.) |
+| `npm run doctor` | Diagnose DB port, demo tenant, and API |
+| `npm run docker:reseed` | `docker:infra` + wait + `seed` |
+| `npm run dev` / `dev:host` | UI only — **no API** (login will fail) |
+| `npm run docker:up` | Full Docker stack (API + worker + DB) |
 | `npm run docker:down` | Stop all containers |
 | `npm run build` | Production build (frontend + API) |
 
 Open **http://localhost:5173** · API health: **http://localhost:3000/health**
+
+**LAN / phone testing:** `npm run dev:full:host` — open the **Network** URL Vite prints (e.g. `http://192.168.x.x:5173`). Docker Desktop must be running first.
+
+**Login fails or `password authentication failed for user vms`?** Your PC likely has **another Postgres on port 5432**. VMS uses Docker Postgres on host port **15432**. From the repo root:
+
+```powershell
+npm run doctor
+npm run docker:infra
+npm run seed
+npm run dev:full:host
+```
+
+Do **not** use UI-only `npm run dev:host`. Subdomain: `demo`. Tap a role on the login page to auto-fill.
 
 > **After pulling updates:** run `npm run docker:up` (rebuilds API image). If login returns **500**, an old Docker image may still be proxying to the removed Go backend — run `docker compose down && docker compose up --build --remove-orphans -d`.
 
@@ -117,6 +134,7 @@ Open **http://localhost:5173** · API health: **http://localhost:3000/health**
 | Tenant admin | `admin@vms.local` | `admin123` | `demo` |
 | Manager | `manager@vms.local` | `manager123` | `demo` |
 | Supervisor | `supervisor@vms.local` | `super123` | `demo` |
+| Employee | `employee@vms.local` | `employee123` | `demo` |
 | Driver | `driver@vms.local` | `driver123` | `demo` |
 
 ---
@@ -201,6 +219,23 @@ docker compose up --build
 
 Services: **postgres**, **redis**, **web** (Next.js API on `:3000`), **worker** (expiry cron).
 
+### Linux server (ports 5000 + 6000)
+
+When the host already uses `:80`, `:5432`, `:5173`, etc., deploy with dedicated client ports:
+
+| Port | Service |
+|------|---------|
+| **5000** | Web UI (what clients open in the browser) |
+| **6000** | API (direct access / health / mobile) |
+
+Postgres and Redis stay internal (no host ports). Full guide: **[deploy/LINUX.md](deploy/LINUX.md)**
+
+```bash
+cp deploy/linux.env.example deploy/linux.env
+# edit deploy/linux.env — passwords, domain, CORS_ORIGINS
+docker compose -f docker-compose.linux.yml --env-file deploy/linux.env up --build -d
+```
+
 ---
 
 ## Mobile builds
@@ -240,7 +275,16 @@ Open a pull request on GitHub against `main`.
 
 ## Changelog
 
-### Next.js-only backend (current)
+### UI, ops, and deployment (latest)
+
+- Asset operations for all asset types; fuel log white-screen fix; horizontal dialog forms
+- Nepal (NPT) date formatting for allocations, drivers, and insurance
+- Dev Postgres on host port **15432** (avoids conflict with other Postgres on `:5432`)
+- `npm run doctor`, `npm run seed`, `docker-compose.linux.yml` (client ports **5000** / **6000**)
+- Demo login auto-seed on first sign-in; driver role sees dashboard, fleet, allocations
+- LAN dev via `npm run dev:full:host` with CORS for `192.168.x.x`
+
+### Next.js-only backend
 
 - Removed Go API and worker (`backend/` deleted)
 - All `/api/v1/*` routes implemented in `web/` via Next.js App Router

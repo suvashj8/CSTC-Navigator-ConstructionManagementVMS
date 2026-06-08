@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: vms
       POSTGRES_DB: vms_main
     ports:
-      - "5432:5432"
+      # Host 15432 — Windows often has native Postgres on 5432/5433/5434; use a dedicated port
+      - "15432:5432"
     volumes:
       - vms_pg:/var/lib/postgresql/data
     healthcheck:
@@ -41,7 +42,8 @@ services:
       JWT_SECRET: dev-jwt-secret-change-in-production-min-32-chars
       SEED_ON_STARTUP: "true"
       EXPORT_DIR: /app/exports
-      CORS_ORIGINS: http://localhost:5173,capacitor://localhost,http://localhost
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,capacitor://localhost,http://localhost
+      VMS_ALLOW_LAN_CORS: "true"
     volumes:
       - ./web/exports:/app/exports
     depends_on:

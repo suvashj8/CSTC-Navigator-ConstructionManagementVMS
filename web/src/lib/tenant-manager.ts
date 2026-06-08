@@ -13,6 +13,13 @@ export type TenantInfo = {
 
 const pools = new Map<string, Pool>();
 
+function clearTenantPoolCache(): void {
+  for (const p of pools.values()) {
+    void p.end().catch(() => {});
+  }
+  pools.clear();
+}
+
 function dbConfig() {
   return {
     host: process.env.MAIN_DB_HOST ?? "localhost",
@@ -24,6 +31,23 @@ function dbConfig() {
 
 function buildConnUrl(host: string, port: number, user: string, pass: string, database: string): string {
   return `postgres://${user}:${encodeURIComponent(pass)}@${host}:${port}/${database}`;
+}
+
+/** API on host machine must use published Docker port (e.g. 15432), not container port 5432. */
+function resolveTenantDbEndpoint(
+  storedHost: string | null | undefined,
+  storedPort: number | null | undefined
+): { host: string; port: number } {
+  const cfg = dbConfig();
+  const cfgPort = Number(cfg.port);
+  const stored = (storedHost ?? "").trim();
+  let host = stored || cfg.host;
+  if (host === "postgres" && cfg.host !== "postgres") {
+    host = cfg.host;
+  }
+  const onHostMachine = cfg.host !== "postgres";
+  const port = onHostMachine ? cfgPort : storedPort || cfgPort;
+  return { host, port };
 }
 
 async function connect(url: string): Promise<Pool> {
@@ -53,7 +77,14 @@ function scanTenantRow(row: {
 }): TenantInfo {
   if (row.status === "suspended") throw new Error("tenant suspended");
   const cfg = dbConfig();
-  const url = buildConnUrl(row.host || cfg.host, row.port || Number(cfg.port), row.username || cfg.user, row.password_encrypted || cfg.password, row.database_name);
+  const { host, port } = resolveTenantDbEndpoint(row.host, row.port);
+  const url = buildConnUrl(
+    host,
+    port,
+    row.username || cfg.user,
+    row.password_encrypted || cfg.password,
+    row.database_name
+  );
   return {
     id: row.tenant_id,
     subdomain: row.subdomain,
@@ -73,6 +104,17 @@ export function getTenantManager() {
 
     async initMain() {
       await mainUp(main);
+    },
+
+    /** Fix tenant DB host/port when API runs on host but registry still has Docker-internal values. */
+    async syncConnectionHosts() {
+      const cfg = dbConfig();
+      if (cfg.host === "postgres") return;
+      await main.query(
+        `UPDATE tenant_db_connections SET host = $1, port = $2 WHERE host = 'postgres' OR port = 5432`,
+        [cfg.host, Number(cfg.port)]
+      );
+      clearTenantPoolCache();
     },
 
     async bySubdomain(subdomain: string): Promise<TenantInfo> {

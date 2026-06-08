@@ -159,18 +159,12 @@ html.platform-ios body {
       radial-gradient(at 100% 100%, hsl(160 60% 40% / 0.05) 0, transparent 50%);
   }
 
-  /* Radix Select: prevent collapsed "white stripe" menus (dialogs + empty lists) */
-  .vms-select-viewport,
-  [data-radix-select-viewport] {
-    max-height: 15rem !important;
-    height: auto !important;
-    flex: none !important;
-    overflow-x: hidden;
+  /* Radix Select: scrollable list in dialogs (do not override Radix height calc) */
+  .vms-select-viewport {
+    max-height: min(16rem, var(--radix-select-content-available-height, 16rem));
     overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-  }
-
-  [role="listbox"][data-state="open"] {
-    max-height: 15rem;
   }
 }

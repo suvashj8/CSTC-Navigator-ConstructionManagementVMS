@@ -4,18 +4,11 @@ import { toast } from "sonner";
 import { HardHat, Lock, Mail, Sparkles, Truck } from "lucide-react";
 import { login } from "@/api/auth";
 import { useAuthStore } from "@/store/auth";
+import { DEMO_ACCOUNTS, DEMO_SUBDOMAIN } from "@/lib/demo-accounts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-const demoAccounts = [
-  { email: "admin@vms.local", password: "admin123", role: "Admin" },
-  { email: "manager@vms.local", password: "manager123", role: "Manager" },
-  { email: "supervisor@vms.local", password: "super123", role: "Supervisor" },
-  { email: "employee@vms.local", password: "employee123", role: "Employee" },
-  { email: "driver@vms.local", password: "driver123", role: "Driver" },
-];
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -23,6 +16,45 @@ export default function LoginPage() {
   const tenantSubdomain = useAuthStore((s) => s.tenantSubdomain);
   const setTenantSubdomain = useAuthStore((s) => s.setTenantSubdomain);
   const [loading, setLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState("Admin");
+  const [email, setEmail] = useState("admin@vms.local");
+  const [password, setPassword] = useState("admin123");
+
+  function pickDemoAccount(account: (typeof DEMO_ACCOUNTS)[number]) {
+    setSelectedRole(account.role);
+    setEmail(account.email);
+    setPassword(account.password);
+    if (!tenantSubdomain) setTenantSubdomain(DEMO_SUBDOMAIN);
+  }
+
+  async function signIn(subdomain: string, loginEmail: string, loginPassword: string) {
+    const sub = subdomain.trim().toLowerCase() || DEMO_SUBDOMAIN;
+    const normalizedEmail = loginEmail.trim().toLowerCase();
+    const normalizedPassword = loginPassword.trim();
+    if (!sub || !normalizedEmail || !normalizedPassword) {
+      toast.error("Subdomain, email, and password are required");
+      return;
+    }
+    setTenantSubdomain(sub);
+    setLoading(true);
+    try {
+      const res = await login(normalizedEmail, normalizedPassword, sub);
+      setAuth(res.access_token, res.user);
+      toast.success("Signed in successfully");
+      nav("/dashboard", { replace: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Sign in failed";
+      toast.error(msg, {
+        description:
+          msg.includes("database") || msg.includes("reach API")
+            ? undefined
+            : "Use subdomain demo. From project root run: npm run dev:full:host",
+        duration: 8000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="grid h-screen lg:min-h-screen lg:grid-cols-2 overflow-hidden">
@@ -54,7 +86,7 @@ export default function LoginPage() {
         </div>
         <p className="relative flex items-center gap-2 text-xs text-sidebar-foreground/50">
           <HardHat className="h-3.5 w-3.5" />
-          Vehicle Management System · Demo mode
+          Vehicle Management System · Subdomain: {DEMO_SUBDOMAIN}
         </p>
       </div>
 
@@ -81,22 +113,14 @@ export default function LoginPage() {
           <CardContent>
             <form
               className="space-y-4"
-              onSubmit={async (e) => {
+              onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
-                const email = String(fd.get("email")).trim().toLowerCase();
-                const password = String(fd.get("password")).trim();
-                setLoading(true);
-                try {
-                  const res = await login(email, password);
-                  setAuth(res.access_token, res.user);
-                  toast.success("Signed in successfully");
-                  nav("/dashboard", { replace: true });
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Sign in failed");
-                } finally {
-                  setLoading(false);
-                }
+                void signIn(
+                  String(fd.get("subdomain")),
+                  String(fd.get("email")),
+                  String(fd.get("password"))
+                );
               }}
             >
               <div className="space-y-2">
@@ -104,12 +128,18 @@ export default function LoginPage() {
                 <Input
                   id="subdomain"
                   name="subdomain"
-                  placeholder="demo"
-                  value={tenantSubdomain}
+                  placeholder={DEMO_SUBDOMAIN}
+                  value={tenantSubdomain || DEMO_SUBDOMAIN}
                   onChange={(e) => setTenantSubdomain(e.target.value.trim().toLowerCase())}
                   required
                 />
               </div>
+              {selectedRole && (
+                <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+                  Signing in as <span className="font-semibold">{selectedRole}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{email}</span>
+                </p>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <div className="relative">
@@ -120,7 +150,8 @@ export default function LoginPage() {
                     type="email"
                     autoComplete="username"
                     className="pl-10"
-                    defaultValue="admin@vms.local"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                   />
                 </div>
@@ -135,7 +166,8 @@ export default function LoginPage() {
                     type="password"
                     autoComplete="current-password"
                     className="pl-10"
-                    defaultValue="admin123"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     required
                   />
                 </div>
@@ -147,13 +179,31 @@ export default function LoginPage() {
                 Super-user platform console
               </Button>
             </form>
-            <div className="mt-4 space-y-1 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Demo accounts</p>
-              {demoAccounts.map((a) => (
-                <p key={a.email}>
-                  <code className="rounded bg-muted px-1">{a.role}</code> {a.email} / {a.password}
-                </p>
-              ))}
+            <div className="mt-4 space-y-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">Demo accounts (subdomain: {DEMO_SUBDOMAIN})</p>
+              <p>Tap a role to fill credentials, then sign in.</p>
+              <div className="flex flex-wrap gap-2">
+                {DEMO_ACCOUNTS.map((a) => (
+                  <Button
+                    key={a.email}
+                    type="button"
+                    variant={selectedRole === a.role ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={loading}
+                    onClick={() => pickDemoAccount(a)}
+                  >
+                    {a.role}
+                  </Button>
+                ))}
+              </div>
+              <div className="space-y-1 pt-1">
+                {DEMO_ACCOUNTS.map((a) => (
+                  <p key={a.email}>
+                    <code className="rounded bg-muted px-1">{a.role}</code> {a.email} / {a.password}
+                  </p>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>

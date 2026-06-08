@@ -254,6 +254,10 @@ async function tenantLogin(req: NextRequest) {
 
   const tm = getTenantManager();
   try {
+    const { ensureDemoSeeded } = await import("../ensure-demo");
+    if (sub.toLowerCase() === "demo") {
+      await ensureDemoSeeded(tm);
+    }
     const info = await tm.bySubdomain(sub.toLowerCase());
     const pool = await tm.pool(info.id);
     const res = await pool.query(
@@ -268,7 +272,14 @@ async function tenantLogin(req: NextRequest) {
     const locIds = (row.location_ids as string[] | null)?.map(String) ?? [];
     const login = await signTenant(row.user_id, row.email, row.name, row.role, info.id, info.name, locIds);
     return ok(login);
-  } catch {
+  } catch (e) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[tenantLogin]", e);
+    }
+    const msg = (e as Error).message ?? "";
+    if (msg.includes("ECONNREFUSED") || msg.includes("connect")) {
+      return unauthorized("database not reachable — run npm run docker:infra then npm run seed");
+    }
     return unauthorized("invalid tenant or credentials");
   }
 }
@@ -378,11 +389,14 @@ async function dashboardStats(pool: import("pg").Pool) {
 async function listAssets(req: NextRequest, pool: import("pg").Pool, p: ReturnType<typeof pageParams>) {
   const search = req.nextUrl.searchParams.get("search") ?? "";
   const status = req.nextUrl.searchParams.get("status") ?? "";
+  const operational = req.nextUrl.searchParams.get("operational") === "true";
   const assetType = req.nextUrl.searchParams.get("asset_type") ?? "";
   const operationMode = req.nextUrl.searchParams.get("operation_mode") ?? "";
   let where = "WHERE 1=1";
   const args: unknown[] = [];
-  if (status) {
+  if (operational) {
+    where += ` AND a.status IN ('active', 'in_transit', 'in_repair')`;
+  } else if (status) {
     args.push(status);
     where += ` AND a.status = $${args.length}`;
   }
@@ -391,9 +405,9 @@ async function listAssets(req: NextRequest, pool: import("pg").Pool, p: ReturnTy
     where += ` AND a.asset_type = $${args.length}`;
   }
   if (operationMode === "hour") {
-    where += " AND (a.operation_mode = 'hour' OR a.vehicle_category = 'Dozer')";
+    where += " AND (a.operation_mode = 'hour' OR a.vehicle_category = 'Dozer' OR a.asset_type IN ('equipment', 'tool'))";
   } else if (operationMode === "km") {
-    where += " AND NOT (a.operation_mode = 'hour' OR a.vehicle_category = 'Dozer')";
+    where += " AND a.asset_type = 'vehicle' AND NOT (a.operation_mode = 'hour' OR a.vehicle_category = 'Dozer')";
   }
   if (search) {
     args.push(`%${search.toLowerCase()}%`);
@@ -605,7 +619,7 @@ async function listDrivers(req: NextRequest, pool: import("pg").Pool, p: ReturnT
   const { list, total } = await paginatedQuery(pool, p, `SELECT COUNT(*)::bigint AS count${from}${where}`, args, dataSQL, args, (r) => ({
     id: r.driver_id, user_id: r.user_id, name: r.name, email: r.email,
     license_no: r.license_no, license_class: r.license_class,
-    issue_date: r.issue_date, expiry_date: r.expiry_date, status: r.status,
+    issue_date: datePtr(r.issue_date), expiry_date: datePtr(r.expiry_date), status: r.status,
   }));
   return ok(list, paginatedMeta(total, p));
 }
@@ -658,7 +672,7 @@ async function listInsurance(pool: import("pg").Pool, p: ReturnType<typeof pageP
     id: r.policy_id, asset_id: r.asset_id, asset_label: r.asset_label, policy_no: r.policy_no,
     insurer_name: r.insurer_name, coverage_type: r.coverage_type,
     insured_value: Number(r.insured_value), premium_amount: Number(r.premium_amount),
-    start_date: r.start_date, expiry_date: r.expiry_date, status: r.status,
+    start_date: datePtr(r.start_date), expiry_date: datePtr(r.expiry_date), status: r.status,
   }));
   return ok(list, paginatedMeta(total, p));
 }

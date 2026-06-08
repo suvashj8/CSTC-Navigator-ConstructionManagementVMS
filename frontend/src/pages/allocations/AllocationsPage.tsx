@@ -10,19 +10,41 @@ import { listUsers } from "@/api/users";
 import { FilterRow, PageShell } from "@/components/layout/page-shell";
 import { PaginationBar } from "@/components/layout/pagination-bar";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
+import { cn } from "@/lib/utils";
 import { MobileCard, MobileCardList } from "@/components/layout/mobile-card";
 import { ResponsiveTable } from "@/components/layout/responsive-table";
 import { AllocStateBadge } from "@/components/shared/status-badges";
 import { PermissionGate } from "@/guards/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  addDaysToDateString,
+  dateTimeLocalToApiDate,
+  formatNepalDateTime,
+  nowNepalDateTimeLocal,
+  todayNepalDate,
+  toDateTimeLocalNpt,
+} from "@/lib/nepalDate";
 import type { AllocState } from "@/types/domain";
+
+const emptyAllocationForm = () => {
+  const start = todayNepalDate();
+  return {
+    asset_id: "",
+    from_location_id: "",
+    to_location_id: "",
+    driver_id: "",
+    start_at: nowNepalDateTimeLocal(),
+    expected_return_at: toDateTimeLocalNpt(addDaysToDateString(start, 7)),
+  };
+};
 
 const states: { value: AllocState | "all"; label: string }[] = [
   { value: "all", label: "All states" },
@@ -40,14 +62,7 @@ export default function AllocationsPage() {
   const [page, setPage] = useState(1);
   const perPage = DEFAULT_PER_PAGE;
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    asset_id: "",
-    from_location_id: "",
-    to_location_id: "",
-    driver_id: "",
-    start_date: "",
-    expected_return: "",
-  });
+  const [form, setForm] = useState(emptyAllocationForm);
 
   const { data, isLoading } = useQuery({
     queryKey: ["allocations", page, stateFilter],
@@ -93,6 +108,7 @@ export default function AllocationsPage() {
       qc.invalidateQueries({ queryKey: ["allocations"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setOpen(false);
+      setForm(emptyAllocationForm());
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -152,7 +168,7 @@ export default function AllocationsPage() {
       description="Track asset transfers between construction sites with approval workflow."
       actions={
         <PermissionGate permission="create_allocation">
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={() => (setForm(emptyAllocationForm()), setOpen(true))}>
             <Plus className="h-4 w-4" />
             New request
           </Button>
@@ -201,7 +217,7 @@ export default function AllocationsPage() {
                       subtitle={`${r.from_location_name} → ${r.to_location_name}`}
                       fields={[
                         { label: "Driver", value: r.driver_name ?? "—" },
-                        { label: "Start", value: r.start_date },
+                        { label: "Start", value: formatNepalDateTime(r.start_date) },
                         { label: "State", value: <AllocStateBadge state={r.state} /> },
                       ]}
                       actions={actionButtons(r.id, r.state)}
@@ -241,8 +257,8 @@ export default function AllocationsPage() {
                           {r.from_location_name} → {r.to_location_name}
                         </TableCell>
                         <TableCell>{r.driver_name}</TableCell>
-                        <TableCell>{r.start_date}</TableCell>
-                        <TableCell>{r.expected_return}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatNepalDateTime(r.start_date)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatNepalDateTime(r.expected_return)}</TableCell>
                         <TableCell>
                           <AllocStateBadge state={r.state} />
                         </TableCell>
@@ -258,19 +274,25 @@ export default function AllocationsPage() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>New allocation request</DialogTitle>
             <DialogDescription>Request transfer of an asset to another work location.</DialogDescription>
           </DialogHeader>
-          <form
-            className="grid gap-4"
+          <DialogForm
             onSubmit={(e) => {
               e.preventDefault();
-              createMut.mutate(form);
+              createMut.mutate({
+                asset_id: form.asset_id,
+                from_location_id: form.from_location_id,
+                to_location_id: form.to_location_id,
+                driver_id: form.driver_id,
+                start_date: dateTimeLocalToApiDate(form.start_at),
+                expected_return: dateTimeLocalToApiDate(form.expected_return_at),
+              });
             }}
           >
-            <div className="space-y-2">
+            <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
               <Label>Asset</Label>
               <Select value={form.asset_id || undefined} onValueChange={(v) => setForm((f) => ({ ...f, asset_id: v }))}>
                 <SelectTrigger>
@@ -289,9 +311,8 @@ export default function AllocationsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>From location</Label>
+            <div className={DIALOG_FORM_FIELD}>
+              <Label>From location</Label>
                 <Select
                   value={form.from_location_id || undefined}
                   onValueChange={(v) => setForm((f) => ({ ...f, from_location_id: v }))}
@@ -311,9 +332,9 @@ export default function AllocationsPage() {
                     )}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>To location</Label>
+            </div>
+            <div className={DIALOG_FORM_FIELD}>
+              <Label>To location</Label>
                 <Select
                   value={form.to_location_id || undefined}
                   onValueChange={(v) => setForm((f) => ({ ...f, to_location_id: v }))}
@@ -333,9 +354,8 @@ export default function AllocationsPage() {
                     )}
                   </SelectContent>
                 </Select>
-              </div>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Driver</Label>
               <Select value={form.driver_id || undefined} onValueChange={(v) => setForm((f) => ({ ...f, driver_id: v }))}>
                 <SelectTrigger>
@@ -354,25 +374,30 @@ export default function AllocationsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Start date</Label>
-                <Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Expected return</Label>
+            <div className={DIALOG_FORM_FIELD}>
+              <Label>Start date &amp; time (NPT)</Label>
                 <Input
-                  type="date"
-                  value={form.expected_return}
-                  onChange={(e) => setForm((f) => ({ ...f, expected_return: e.target.value }))}
+                  type="datetime-local"
+                  value={form.start_at}
+                  onChange={(e) => setForm((f) => ({ ...f, start_at: e.target.value }))}
                   required
                 />
-              </div>
+              <p className="text-xs text-muted-foreground">Nepal Standard Time (UTC+5:45)</p>
             </div>
-            <Button type="submit" disabled={createMut.isPending}>
+            <div className={DIALOG_FORM_FIELD}>
+              <Label>Expected return (NPT)</Label>
+                <Input
+                  type="datetime-local"
+                  value={form.expected_return_at}
+                  onChange={(e) => setForm((f) => ({ ...f, expected_return_at: e.target.value }))}
+                  required
+                />
+              <p className="text-xs text-muted-foreground">Nepal Standard Time (UTC+5:45)</p>
+            </div>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={createMut.isPending}>
               {createMut.isPending ? "Submitting…" : "Submit request"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </PageShell>

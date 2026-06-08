@@ -33,6 +33,12 @@ export function apiErrorMessage(err: unknown): string {
     if (msg) return msg;
     if (res?.status) return `Request failed (${res.status})`;
   }
+  if (err && typeof err === "object" && "code" in err) {
+    const code = (err as { code?: string }).code;
+    if (code === "ERR_NETWORK" || code === "ECONNREFUSED") {
+      return "Cannot reach API. Start Docker, then run npm run dev:full:host from the project root.";
+    }
+  }
   if (err instanceof Error && err.message) return err.message;
   return "Request failed";
 }

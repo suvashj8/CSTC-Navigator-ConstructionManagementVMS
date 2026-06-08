@@ -1,10 +1,16 @@
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOverlayPortalContainer } from "@/components/ui/overlay-portal-context";
 
-const Select = SelectPrimitive.Root;
+const Select = ({
+  modal,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) => {
+  const inOverlay = useOverlayPortalContainer();
+  return <SelectPrimitive.Root modal={modal ?? !inOverlay} {...props} />;
+};
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
@@ -28,42 +34,6 @@ const SelectTrigger = React.forwardRef<
 ));
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
-const SelectScrollUpButton = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpButton>
->(({ className, ...props }, ref) => (
-  <SelectPrimitive.ScrollUpButton
-    ref={ref}
-    className={cn(
-      "flex cursor-default items-center justify-center py-1",
-      "data-[disabled]:pointer-events-none data-[disabled]:m-0 data-[disabled]:h-0 data-[disabled]:overflow-hidden data-[disabled]:p-0 data-[disabled]:opacity-0",
-      className
-    )}
-    {...props}
-  >
-    <ChevronUp className="h-4 w-4" />
-  </SelectPrimitive.ScrollUpButton>
-));
-SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName;
-
-const SelectScrollDownButton = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>
->(({ className, ...props }, ref) => (
-  <SelectPrimitive.ScrollDownButton
-    ref={ref}
-    className={cn(
-      "flex cursor-default items-center justify-center py-1",
-      "data-[disabled]:pointer-events-none data-[disabled]:m-0 data-[disabled]:h-0 data-[disabled]:overflow-hidden data-[disabled]:p-0 data-[disabled]:opacity-0",
-      className
-    )}
-    {...props}
-  >
-    <ChevronDown className="h-4 w-4" />
-  </SelectPrimitive.ScrollDownButton>
-));
-SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayName;
-
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
@@ -84,24 +54,18 @@ const SelectContent = React.forwardRef<
       <SelectPrimitive.Content
         ref={ref}
         className={cn(
-          "z-[200] min-w-[var(--radix-select-trigger-width,12rem)] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg",
+          "z-[300] min-w-[var(--radix-select-trigger-width,12rem)] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           className
         )}
         position={resolvedPosition}
         sideOffset={4}
-        collisionPadding={16}
+        collisionPadding={24}
         onCloseAutoFocus={handleCloseAutoFocus}
+        onWheel={(event) => event.stopPropagation()}
         {...props}
       >
-        <SelectScrollUpButton />
-        <SelectPrimitive.Viewport
-          className="vms-select-viewport p-1"
-          onWheel={(event) => event.stopPropagation()}
-        >
-          {children}
-        </SelectPrimitive.Viewport>
-        <SelectScrollDownButton />
+        <SelectPrimitive.Viewport className="vms-select-viewport p-1">{children}</SelectPrimitive.Viewport>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );
@@ -154,6 +118,10 @@ const SelectSeparator = React.forwardRef<
   <SelectPrimitive.Separator ref={ref} className={cn("-mx-1 my-1 h-px bg-muted", className)} {...props} />
 ));
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
+
+/** @deprecated Scroll buttons removed — viewport uses native overflow scroll. */
+const SelectScrollUpButton = () => null;
+const SelectScrollDownButton = () => null;
 
 export {
   Select,

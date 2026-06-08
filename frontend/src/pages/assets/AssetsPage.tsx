@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -368,7 +369,7 @@ export default function AssetsPage() {
       </Card>
 
       <Dialog open={modal !== null} onOpenChange={(o) => !o && (setModal(null), setEditing(null))}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{modal === "edit" ? "Edit asset" : "Register asset"}</DialogTitle>
             <DialogDescription>
@@ -377,8 +378,8 @@ export default function AssetsPage() {
                 : "Enter vehicle or equipment details for the construction fleet."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
+          <DialogForm onSubmit={handleSubmit}>
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Asset type</Label>
               <Select
                 value={form.asset_type}
@@ -401,7 +402,7 @@ export default function AssetsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Reg / Serial no.</Label>
               <Input value={form.reg_serial_no} onChange={(e) => setField("reg_serial_no", e.target.value)} required />
             </div>
@@ -413,21 +414,21 @@ export default function AssetsPage() {
               />
             ) : (
               <>
-                <div className="space-y-2">
+                <div className={DIALOG_FORM_FIELD}>
                   <Label>Make (manufacturer)</Label>
                   <Input value={form.make} onChange={(e) => setField("make", e.target.value)} required />
                 </div>
-                <div className="space-y-2">
+                <div className={DIALOG_FORM_FIELD}>
                   <Label>Model</Label>
                   <Input value={form.model} onChange={(e) => setField("model", e.target.value)} required />
                 </div>
               </>
             )}
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Year</Label>
               <Input type="number" value={form.year} onChange={(e) => setField("year", e.target.value)} required />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Ownership</Label>
               <Select value={form.ownership_type} onValueChange={(v) => setField("ownership_type", v as OwnershipType)}>
                 <SelectTrigger>
@@ -440,7 +441,7 @@ export default function AssetsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Work location</Label>
               <Select value={form.location_id || undefined} onValueChange={(v) => setField("location_id", v)}>
                 <SelectTrigger>
@@ -460,7 +461,7 @@ export default function AssetsPage() {
               </Select>
             </div>
             {modal === "edit" && (
-              <div className="space-y-2 sm:col-span-2">
+              <div className={DIALOG_FORM_FIELD}>
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={(v) => setField("status", v as AssetStatus)}>
                   <SelectTrigger>
@@ -475,10 +476,10 @@ export default function AssetsPage() {
                 </Select>
               </div>
             )}
-            <Button type="submit" className="w-full sm:col-span-2" disabled={saving}>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
 

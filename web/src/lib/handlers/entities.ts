@@ -100,9 +100,9 @@ export async function fetchAllocation(pool: Pool, id: string) {
     driver_name: r.driver_name,
     approved_by: r.approved_by,
     state: r.state,
-    start_date: r.start_date,
-    expected_return: r.expected_return,
-    actual_return: r.actual_return,
+    start_date: datePtr(r.start_date),
+    expected_return: datePtr(r.expected_return),
+    actual_return: datePtr(r.actual_return),
   };
 }
 
@@ -118,8 +118,8 @@ export function scanAllocationRow(r: Record<string, unknown>) {
     driver_id: r.driver_id,
     driver_name: r.driver_name,
     state: r.state,
-    start_date: r.start_date,
-    expected_return: r.expected_return,
+    start_date: datePtr(r.start_date),
+    expected_return: datePtr(r.expected_return),
   };
 }
 
@@ -179,8 +179,8 @@ export async function fetchDriver(pool: Pool, id: string) {
     email: r.email,
     license_no: r.license_no,
     license_class: r.license_class,
-    issue_date: r.issue_date,
-    expiry_date: r.expiry_date,
+    issue_date: datePtr(r.issue_date),
+    expiry_date: datePtr(r.expiry_date),
     status: r.status,
   };
 }
@@ -203,8 +203,8 @@ export async function fetchInsurance(pool: Pool, id: string) {
     coverage_type: r.coverage_type,
     insured_value: Number(r.insured_value),
     premium_amount: Number(r.premium_amount),
-    start_date: r.start_date,
-    expiry_date: r.expiry_date,
+    start_date: datePtr(r.start_date),
+    expiry_date: datePtr(r.expiry_date),
     status: r.status,
   };
 }

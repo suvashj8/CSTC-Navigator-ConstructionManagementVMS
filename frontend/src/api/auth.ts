@@ -11,9 +11,10 @@ type LoginResponse = {
   user: AuthUser;
 };
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string, subdomain?: string) {
   const normalized = email.trim().toLowerCase();
-  const subdomain = useAuthStore.getState().tenantSubdomain || "demo";
+  const sub = (subdomain ?? useAuthStore.getState().tenantSubdomain ?? "demo").trim().toLowerCase();
+  if (sub) useAuthStore.getState().setTenantSubdomain(sub);
 
   if (useMock) {
     await delay();
@@ -27,7 +28,11 @@ export async function login(email: string, password: string) {
   }
 
   return unwrap(
-    api.post("/api/v1/auth/login", { email: normalized, password })
+    api.post(
+      "/api/v1/auth/login",
+      { email: normalized, password },
+      { headers: { "X-Tenant-Subdomain": sub } }
+    )
   ) as Promise<LoginResponse>;
 }
 

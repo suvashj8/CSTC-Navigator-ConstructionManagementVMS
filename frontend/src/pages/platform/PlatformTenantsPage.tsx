@@ -7,6 +7,7 @@ import { createTenant, listTenants, switchTenant, updateTenantStatus } from "@/a
 import { PageShell } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -130,8 +131,7 @@ export default function PlatformTenantsPage() {
           <DialogHeader>
             <DialogTitle>Provision new tenant</DialogTitle>
           </DialogHeader>
-          <form
-            className="grid gap-3"
+          <DialogForm
             onSubmit={(e) => {
               e.preventDefault();
               createMut.mutate(form);
@@ -144,7 +144,7 @@ export default function PlatformTenantsPage() {
               ["admin_email", "Admin email"],
               ["admin_password", "Admin password"],
             ].map(([key, label]) => (
-              <div key={key} className="space-y-1">
+              <div key={key} className={DIALOG_FORM_FIELD}>
                 <Label>{label}</Label>
                 <Input
                   type={key.includes("password") ? "password" : key.includes("email") ? "email" : "text"}
@@ -154,10 +154,10 @@ export default function PlatformTenantsPage() {
                 />
               </div>
             ))}
-            <Button type="submit" disabled={createMut.isPending}>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={createMut.isPending}>
               {createMut.isPending ? "Provisioning…" : "Create tenant"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </PageShell>

@@ -3,12 +3,15 @@ export async function register() {
     const { getTenantManager } = await import("./src/lib/tenant-manager");
     const { runSeed } = await import("./src/lib/seed");
 
-    const tm = getTenantManager();
     try {
-      await tm.initMain();
       if (process.env.SEED_ON_STARTUP === "true") {
+        const tm = getTenantManager();
         await runSeed(tm);
-        console.log("[vms] seed completed");
+        console.log("[vms] demo accounts seeded (subdomain: demo)");
+      } else {
+        const tm = getTenantManager();
+        await tm.initMain();
+        await tm.syncConnectionHosts();
       }
     } catch (e) {
       console.error("[vms] startup migration/seed failed:", e);

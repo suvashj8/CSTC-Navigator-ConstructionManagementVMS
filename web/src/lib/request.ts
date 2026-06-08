@@ -48,14 +48,27 @@ export function pageParams(req: NextRequest) {
   return { page, perPage, offset: (page - 1) * perPage };
 }
 
+function isDevLanOrigin(origin: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(
+    origin
+  );
+}
+
 export function corsHeaders(origin: string | null): HeadersInit {
-  const allowed = (process.env.CORS_ORIGINS ?? "http://localhost:5173,capacitor://localhost,http://localhost").split(",");
+  const allowed = (process.env.CORS_ORIGINS ?? "http://localhost:5173,capacitor://localhost,http://localhost")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
   const headers: Record<string, string> = {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Tenant-Subdomain",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   };
-  if (origin && allowed.includes(origin)) {
+  const lanOk =
+    !!origin &&
+    isDevLanOrigin(origin) &&
+    (process.env.NODE_ENV === "development" || process.env.VMS_ALLOW_LAN_CORS === "true");
+  if (origin && (allowed.includes(origin) || lanOk)) {
     headers["Access-Control-Allow-Origin"] = origin;
   } else if (!origin) {
     headers["Access-Control-Allow-Origin"] = "*";

@@ -6,6 +6,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/store/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const statCards = [
   { key: "total_assets", label: "Total assets", icon: Truck, href: "/assets", color: "text-primary" },
@@ -18,7 +19,24 @@ const statCards = [
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
+  const { role, atLeast } = usePermissions();
   const { data, isLoading } = useQuery({ queryKey: ["dashboard-stats"], queryFn: getDashboardStats });
+
+  const quickActions = [
+    { to: "/assets", label: "View fleet", minRole: "driver" as const },
+    { to: "/allocations", label: role === "driver" ? "My allocations" : "New allocation", minRole: "driver" as const },
+    { to: "/drivers", label: "Check driver licenses", minRole: "supervisor" as const },
+    { to: "/reports", label: "View reports", minRole: "supervisor" as const },
+  ].filter((a) => atLeast(a.minRole));
+
+  const visibleStatCards =
+    role === "driver"
+      ? statCards
+          .filter((card) => ["total_assets", "active_allocations"].includes(card.key))
+          .map((card) =>
+            card.key === "active_allocations" ? { ...card, label: "My active trips" } : card
+          )
+      : statCards;
 
   return (
     <PageShell
@@ -26,7 +44,7 @@ export default function DashboardPage() {
       description={`Fleet overview for ${user?.tenant_name ?? "your organization"}.`}
     >
       <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-3">
-        {statCards.map(({ key, label, icon: Icon, href, color }) => (
+        {visibleStatCards.map(({ key, label, icon: Icon, href, color }) => (
           <Link key={key} to={href}>
             <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent/20">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -49,15 +67,14 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Quick actions</CardTitle>
-            <CardDescription>Common tasks for site supervisors and managers.</CardDescription>
+            <CardDescription>
+              {role === "driver"
+                ? "Your trips, assigned vehicles, and site updates."
+                : "Common tasks for site supervisors and managers."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
-            {[
-              { to: "/assets", label: "Register asset" },
-              { to: "/allocations", label: "New allocation" },
-              { to: "/drivers", label: "Check driver licenses" },
-              { to: "/reports", label: "View reports" },
-            ].map(({ to, label }) => (
+            {quickActions.map(({ to, label }) => (
               <Link
                 key={to}
                 to={to}

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -201,19 +202,19 @@ export default function UsersPage() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
             <DialogDescription>
               Create a staff account with role and optional work location (per VMS user management).
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+          <DialogForm onSubmit={handleSubmit}>
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Full name</Label>
               <Input value={form.name} onChange={(e) => setField("name", e.target.value)} required />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Email</Label>
               <Input
                 type="email"
@@ -222,7 +223,7 @@ export default function UsersPage() {
                 required
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Password</Label>
               <Input
                 type="password"
@@ -232,7 +233,7 @@ export default function UsersPage() {
                 minLength={6}
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Role</Label>
               <Select value={form.role} onValueChange={(v) => setField("role", v as UserRole)}>
                 <SelectTrigger>
@@ -247,7 +248,7 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Work location</Label>
               <Select
                 value={form.location_id || "none"}
@@ -270,10 +271,10 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="sm:col-span-2" disabled={createMut.isPending}>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={createMut.isPending}>
               {createMut.isPending ? "Saving…" : "Create user"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </PageShell>

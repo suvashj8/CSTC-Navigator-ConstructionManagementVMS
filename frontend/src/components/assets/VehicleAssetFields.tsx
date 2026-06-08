@@ -13,7 +13,9 @@ import {
   modelsForMake,
 } from "@/data/vehicleCatalog";
 import type { Asset } from "@/types/domain";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL } from "@/components/ui/dialog-form";
 import { defaultOperationMode, type OperationMode, usesHourlyOperation } from "@/lib/vehicleOperation";
+import { cn } from "@/lib/utils";
 import {
   emptyOperationFields,
   VehicleOperationFields,
@@ -173,7 +175,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
 
   return (
     <>
-      <div className="space-y-2 sm:col-span-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Vehicle category</Label>
         <Select
           value={vehicle.vehicle_category || undefined}
@@ -205,7 +207,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         </Select>
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Manufacturer (Make)</Label>
         <SearchableAutocomplete
           value={vehicle.makeInput}
@@ -218,7 +220,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         />
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Model</Label>
         <SearchableAutocomplete
           value={vehicle.modelInput}
@@ -230,7 +232,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         />
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Department</Label>
         <Select value={vehicle.department || undefined} onValueChange={(v) => set("department", v)}>
           <SelectTrigger>
@@ -246,7 +248,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         </Select>
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>RTA / Yatayat office</Label>
         <SearchableAutocomplete
           value={vehicle.rta_office}
@@ -258,7 +260,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         />
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Registration date</Label>
         <Input
           type="date"
@@ -267,7 +269,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         />
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Alert cell number</Label>
         <Input
           type="tel"
@@ -278,14 +280,14 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         />
       </div>
 
-      <div className="space-y-2 sm:col-span-2 border-t pt-4">
+      <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL, "border-t pt-4")}>
         <p className="text-sm font-medium">Bluebook (vehicle registration)</p>
         <p className="text-xs text-muted-foreground">
           Nepal vehicle registration book — expiry feeds compliance alerts.
         </p>
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Bluebook no.</Label>
         <Input
           placeholder="Optional"
@@ -294,7 +296,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         />
       </div>
 
-      <div className="space-y-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Bluebook issued</Label>
         <Input
           type="date"
@@ -303,7 +305,7 @@ export function VehicleAssetFields({ vehicle, onChange }: Props) {
         />
       </div>
 
-      <div className="space-y-2 sm:col-span-2">
+      <div className={DIALOG_FORM_FIELD}>
         <Label>Bluebook expires</Label>
         <Input
           type="date"

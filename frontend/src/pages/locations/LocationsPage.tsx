@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -215,7 +216,7 @@ export default function LocationsPage() {
       </Card>
 
       <Dialog open={modal !== null} onOpenChange={(o) => !o && closeModal()}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{modal === "edit" ? "Edit location" : "Add location"}</DialogTitle>
             <DialogDescription>
@@ -224,8 +225,8 @@ export default function LocationsPage() {
                 : "Register a construction site, workshop, or yard for asset deployment and allocations."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4">
-            <div className="space-y-2">
+          <DialogForm onSubmit={handleSubmit}>
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Name</Label>
               <Input
                 placeholder="e.g. Bhaktapur Ring Road Site"
@@ -234,7 +235,7 @@ export default function LocationsPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Type</Label>
               <Select value={form.type} onValueChange={(v) => setField("type", v)}>
                 <SelectTrigger>
@@ -249,7 +250,7 @@ export default function LocationsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Address</Label>
               <Input
                 placeholder="City, province"
@@ -257,7 +258,7 @@ export default function LocationsPage() {
                 onChange={(e) => setField("address", e.target.value)}
               />
             </div>
-            <div className="space-y-2">
+            <div className={DIALOG_FORM_FIELD}>
               <Label>Site manager</Label>
               <Select
                 value={form.manager_id || "none"}
@@ -280,10 +281,10 @@ export default function LocationsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" className={DIALOG_FORM_FULL} disabled={saving}>
               {saving ? "Saving…" : modal === "edit" ? "Save changes" : "Create location"}
             </Button>
-          </form>
+          </DialogForm>
         </DialogContent>
       </Dialog>
     </PageShell>

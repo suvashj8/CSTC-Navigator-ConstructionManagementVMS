@@ -19,11 +19,14 @@ out/
 !.env.example
 !**/.env.example
 !**/.env.*.example
+!web/.env.development
+!frontend/.env.development
 frontend/.env
 frontend/.env.development
 frontend/.env.production
 web/.env
 web/.env.local
+deploy/linux.env
 
 # Logs & runtime
 *.log

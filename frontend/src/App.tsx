@@ -41,7 +41,7 @@ function Lazy({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
-function Private({ children, minRole = "employee" }: { children: ReactNode; minRole?: UserRole }) {
+function Private({ children, minRole = "driver" }: { children: ReactNode; minRole?: UserRole }) {
   const token = useAuthStore((s) => s.token);
   if (!token) return <Navigate to="/login" replace />;
   return <ProtectedRoute minRole={minRole}>{children}</ProtectedRoute>;

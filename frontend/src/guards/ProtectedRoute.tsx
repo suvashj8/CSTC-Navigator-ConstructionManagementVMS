@@ -5,7 +5,7 @@ import type { UserRole } from "@/types/domain";
 
 export function ProtectedRoute({
   children,
-  minRole = "employee",
+  minRole = "driver",
   redirectTo = "/login",
 }: {
   children: ReactNode;

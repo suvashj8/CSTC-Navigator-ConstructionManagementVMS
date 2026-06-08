@@ -1,81 +1,111 @@
 import bcrypt from "bcryptjs";
+import type { Pool } from "pg";
+import { DEMO_ACCOUNTS, DEMO_SUBDOMAIN, DEMO_SUPER_USER, type DemoAccount } from "./demo-accounts";
 import type { TenantManager } from "./tenant-manager";
 
-const superEmail = "super@vms.local";
-const superPassword = "super123";
-const demoSubdomain = "demo";
-const adminEmail = "admin@vms.local";
-const adminPassword = "admin123";
-
-const demoRoleAccounts = [
-  { name: "Ram Thapa", email: "manager@vms.local", password: "manager123", role: "manager" },
-  { name: "Sita Sharma", email: "supervisor@vms.local", password: "super123", role: "supervisor" },
-  { name: "Hari KC", email: "employee@vms.local", password: "employee123", role: "employee" },
-  { name: "Bikash Rai", email: "driver@vms.local", password: "driver123", role: "driver" },
-];
-
 export async function runSeed(tm: TenantManager): Promise<void> {
+  await tm.initMain();
+  await tm.syncConnectionHosts();
   await seedSuperUser(tm);
+
+  let tenantId: string | null = null;
   try {
-    const info = await tm.bySubdomain(demoSubdomain);
-    await ensureDemoRoleUsers(tm, info.id);
+    const info = await tm.bySubdomain(DEMO_SUBDOMAIN);
+    tenantId = info.id;
   } catch {
-    const id = await tm.provision("Demo Construction Co.", demoSubdomain, adminEmail, adminPassword, "Demo Admin");
-    await seedDemoData(tm, id);
+    const row = await tm.main().query(`SELECT tenant_id FROM tenants WHERE subdomain = $1`, [DEMO_SUBDOMAIN]);
+    tenantId = (row.rows[0]?.tenant_id as string | undefined) ?? null;
   }
+
+  if (tenantId) {
+    await ensureDemoUsers(tm, tenantId);
+    return;
+  }
+
+  const admin = DEMO_ACCOUNTS.find((a) => a.role === "admin")!;
+  const id = await tm.provision(
+    "Demo Construction Co.",
+    DEMO_SUBDOMAIN,
+    admin.email,
+    admin.password,
+    admin.name
+  );
+  await seedDemoData(tm, id);
 }
 
 async function seedSuperUser(tm: TenantManager): Promise<void> {
-  const main = tm.main();
-  const exists = await main.query(`SELECT 1 FROM super_users WHERE email = $1`, [superEmail]);
-  if (exists.rowCount && exists.rowCount > 0) return;
-  const hash = await bcrypt.hash(superPassword, 10);
-  await main.query(`INSERT INTO super_users (name, email, password_hash) VALUES ($1,$2,$3)`, [
-    "Platform Admin",
-    superEmail,
-    hash,
-  ]);
+  const hash = await bcrypt.hash(DEMO_SUPER_USER.password, 10);
+  await tm.main().query(
+    `INSERT INTO super_users (name, email, password_hash) VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash`,
+    ["Platform Admin", DEMO_SUPER_USER.email, hash]
+  );
 }
 
-async function ensureDemoRoleUsers(tm: TenantManager, tenantId: string): Promise<void> {
-  const pool = await tm.pool(tenantId);
+async function ensureMainSite(pool: Pool): Promise<string> {
   const locRes = await pool.query(`SELECT location_id FROM work_locations ORDER BY created_at LIMIT 1`);
-  const loc1 = locRes.rows[0]?.location_id;
+  let loc1 = locRes.rows[0]?.location_id as string | undefined;
+  if (!loc1) {
+    const ins = await pool.query(
+      `INSERT INTO work_locations (name, type, address) VALUES ('Main Site', 'construction', 'Head office') RETURNING location_id`
+    );
+    loc1 = ins.rows[0]?.location_id;
+  }
   if (!loc1) throw new Error("work location missing");
+  return loc1;
+}
+
+function roleLocations(
+  role: DemoAccount["role"],
+  loc1: string,
+  allLocIds: string[]
+): { locationId: string | null; locationIds: string[] } {
+  switch (role) {
+    case "admin":
+      return { locationId: null, locationIds: [] };
+    case "manager":
+      return { locationId: loc1, locationIds: [] };
+    case "supervisor":
+      return { locationId: null, locationIds: [...allLocIds] };
+    case "employee":
+      return { locationId: null, locationIds: [loc1] };
+    case "driver":
+      return { locationId: loc1, locationIds: [loc1] };
+  }
+}
+
+async function upsertDemoUser(
+  pool: Pool,
+  acct: DemoAccount,
+  loc1: string,
+  allLocIds: string[]
+): Promise<void> {
+  const hash = await bcrypt.hash(acct.password, 10);
+  const { locationId, locationIds } = roleLocations(acct.role, loc1, allLocIds);
+  await pool.query(
+    `INSERT INTO users (name, email, role, password_hash, status, location_id, location_ids)
+     VALUES ($1, $2, $3, $4, 'active', $5, $6)
+     ON CONFLICT (email) DO UPDATE SET
+       name = EXCLUDED.name,
+       role = EXCLUDED.role,
+       password_hash = EXCLUDED.password_hash,
+       status = 'active',
+       location_id = EXCLUDED.location_id,
+       location_ids = EXCLUDED.location_ids`,
+    [acct.name, acct.email.toLowerCase(), acct.role, hash, locationId, locationIds]
+  );
+}
+
+async function ensureDemoUsers(tm: TenantManager, tenantId: string): Promise<void> {
+  const pool = await tm.pool(tenantId);
+  const loc1 = await ensureMainSite(pool);
 
   const locRows = await pool.query(`SELECT location_id FROM work_locations ORDER BY created_at LIMIT 2`);
-  const locIds = locRows.rows.map((r) => r.location_id as string);
-  const locationIds = locIds.length > 0 ? locIds : [loc1];
+  const allLocIds = locRows.rows.map((r) => r.location_id as string);
+  const locationIds = allLocIds.length > 0 ? allLocIds : [loc1];
 
-  for (const acct of demoRoleAccounts) {
-    const hash = await bcrypt.hash(acct.password, 10);
-    let locationId: string | null = null;
-    let locIdsArr: string[] = [];
-    switch (acct.role) {
-      case "manager":
-        locationId = loc1;
-        break;
-      case "supervisor":
-        locIdsArr = [...locationIds];
-        break;
-      case "employee":
-      case "driver":
-        locIdsArr = [loc1];
-        if (acct.role === "driver") locationId = loc1;
-        break;
-    }
-    const ins = await pool.query(
-      `INSERT INTO users (name, email, role, password_hash, location_id, location_ids)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (email) DO NOTHING`,
-      [acct.name, acct.email, acct.role, hash, locationId, locIdsArr]
-    );
-    if (ins.rowCount === 0) {
-      await pool.query(
-        `UPDATE users SET password_hash = $1, name = $2, role = $3, location_id = $4, location_ids = $5 WHERE email = $6`,
-        [hash, acct.name, acct.role, locationId, locIdsArr, acct.email]
-      );
-    }
+  for (const acct of DEMO_ACCOUNTS) {
+    await upsertDemoUser(pool, acct, loc1, locationIds);
   }
 
   const driverRes = await pool.query(`SELECT user_id FROM users WHERE email = $1`, ["driver@vms.local"]);
@@ -94,7 +124,7 @@ async function ensureDemoRoleUsers(tm: TenantManager, tenantId: string): Promise
 
 async function seedDemoData(tm: TenantManager, tenantId: string): Promise<void> {
   const pool = await tm.pool(tenantId);
-  await ensureDemoRoleUsers(tm, tenantId);
+  await ensureDemoUsers(tm, tenantId);
 
   const loc1Res = await pool.query(`SELECT location_id FROM work_locations WHERE name = 'Main Site'`);
   const loc1 = loc1Res.rows[0]?.location_id;
@@ -193,6 +223,6 @@ async function seedDemoData(tm: TenantManager, tenantId: string): Promise<void> 
     `INSERT INTO notifications (recipient_id, type, title, message, channel, status, sent_at)
      SELECT user_id, 'insurance', 'Policy expiring soon', 'Insurance for Ba 1 Pa 4521 expires in 30 days', 'in_app', 'sent', NOW()
      FROM users WHERE email = $1`,
-    [adminEmail]
+    ["admin@vms.local"]
   );
 }

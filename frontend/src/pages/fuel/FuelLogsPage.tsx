@@ -20,7 +20,8 @@ import { DEFAULT_PER_PAGE } from "@/lib/pagination";
 import { buildFuelInsights } from "@/lib/fuelInsights";
 import type { FuelLog } from "@/types/domain";
 
-function formatDate(iso: string) {
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return "—";
   return iso.slice(0, 16).replace("T", " ");
 }
 
@@ -101,7 +102,7 @@ export default function FuelLogsPage() {
         </TableCell>
         <TableCell>{f.total_cost != null ? `NPR ${f.total_cost}` : "—"}</TableCell>
         <TableCell>
-          <PermissionGate minRole="manager">
+          <PermissionGate roles={["super_user", "admin", "manager"]}>
             <Button
               variant="ghost"
               size="icon"
@@ -170,7 +171,7 @@ export default function FuelLogsPage() {
             </div>
           </div>
 
-          <PermissionGate minRole="supervisor">
+          <PermissionGate permission="manage_fuel">
             <Button
               className="w-full sm:w-auto"
               disabled={!vehicleId || createMut.isPending}
@@ -209,43 +210,56 @@ export default function FuelLogsPage() {
                       rows.map((f) => {
                         const ins = insights.get(f.id);
                         return (
-                          <MobileCard key={f.id} title={formatDate(f.fueled_at)}>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <span className="text-muted-foreground">ODO</span>
-                              <span>{f.odometer_km ?? "—"}</span>
-                              <span className="text-muted-foreground">Liters</span>
-                              <span>{f.liters ?? "—"}</span>
-                              <span className="text-muted-foreground">Δ km</span>
-                              <span>{ins?.deltaKm != null ? Math.round(ins.deltaKm) : "—"}</span>
-                              <span className="text-muted-foreground">km/L</span>
-                              <span>
-                                {ins?.kmPerL != null && Number.isFinite(ins.kmPerL)
-                                  ? ins.kmPerL.toFixed(1)
-                                  : "—"}
-                              </span>
-                              <span className="text-muted-foreground">Cost</span>
-                              <span>{f.total_cost != null ? `NPR ${f.total_cost}` : "—"}</span>
-                            </div>
-                            {ins?.flags?.length ? (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {ins.flags.map((flag) => (
-                                  <Badge key={flag} variant="outline" className="text-[10px]">
-                                    {flag}
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : null}
-                            <PermissionGate minRole="manager">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="mt-3 w-full text-destructive"
-                                onClick={() => deleteMut.mutate(f.id)}
-                              >
-                                Delete
-                              </Button>
-                            </PermissionGate>
-                          </MobileCard>
+                          <MobileCard
+                            key={f.id}
+                            title={formatDate(f.fueled_at)}
+                            subtitle={f.asset_label}
+                            fields={[
+                              { label: "ODO", value: f.odometer_km ?? "—" },
+                              { label: "Liters", value: f.liters ?? "—" },
+                              {
+                                label: "Δ km",
+                                value: ins?.deltaKm != null ? Math.round(ins.deltaKm) : "—",
+                              },
+                              {
+                                label: "km/L",
+                                value:
+                                  ins?.kmPerL != null && Number.isFinite(ins.kmPerL)
+                                    ? ins.kmPerL.toFixed(1)
+                                    : "—",
+                              },
+                              {
+                                label: "Flags",
+                                value: ins?.flags?.length ? (
+                                  <span className="flex flex-wrap gap-1">
+                                    {ins.flags.map((flag) => (
+                                      <Badge key={flag} variant="outline" className="text-[10px]">
+                                        {flag}
+                                      </Badge>
+                                    ))}
+                                  </span>
+                                ) : (
+                                  "—"
+                                ),
+                              },
+                              {
+                                label: "Cost",
+                                value: f.total_cost != null ? `NPR ${f.total_cost}` : "—",
+                              },
+                            ]}
+                            actions={
+                              <PermissionGate roles={["super_user", "admin", "manager"]}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive"
+                                  onClick={() => deleteMut.mutate(f.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </PermissionGate>
+                            }
+                          />
                         );
                       })
                     )}

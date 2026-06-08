@@ -1,0 +1,102 @@
+# Linux server production — client ports 5000 (UI) and 6000 (API).
+# Postgres/Redis stay internal only (no host ports) to avoid conflicts
+# with existing services on the server (e.g. :5432, :80, :5173).
+#
+# Usage:
+#   cp deploy/linux.env.example deploy/linux.env
+#   # edit deploy/linux.env (secrets, domain, LAN IP)
+#   docker compose -f docker-compose.linux.yml --env-file deploy/linux.env up --build -d
+#
+# Clients open: http://YOUR_SERVER:5000  (or your domain on port 5000)
+# Direct API:    http://YOUR_SERVER:6000/health
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vms}
+      POSTGRES_DB: ${POSTGRES_DB:-vms_main}
+    volumes:
+      - vms_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vms} -d ${POSTGRES_DB:-vms_main}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${VMS_API_PORT:-6000}:3000"
+    environment:
+      MAIN_DB_HOST: postgres
+      MAIN_DB_PORT: 5432
+      MAIN_DB_USER: ${POSTGRES_USER:-vms}
+      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-vms}
+      MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
+      REDIS_ADDR: redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-linux-env-min-32-chars}
+      SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
+      EXPORT_DIR: /app/exports
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5000}
+      VMS_ALLOW_LAN_CORS: "true"
+    volumes:
+      - ./web/exports:/app/exports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - backend
+
+  worker:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "scripts/worker.mjs"]
+    environment:
+      MAIN_DB_HOST: postgres
+      MAIN_DB_PORT: 5432
+      MAIN_DB_USER: ${POSTGRES_USER:-vms}
+      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-vms}
+      MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    restart: unless-stopped
+    ports:
+      - "${VMS_UI_PORT:-5000}:80"
+    environment:
+      API_PORT: 3000
+    depends_on:
+      - web
+
+volumes:
+  vms_pg:
