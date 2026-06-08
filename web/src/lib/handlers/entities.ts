@@ -3,7 +3,8 @@ import { derefStr, datePtr, floatPtr, intPtr, uuidToStr } from "../utils";
 
 const assetRegistrySelect = `, a.vehicle_category, a.department, a.rta_office, a.alert_cell_number,
   a.registration_date, a.bluebook_no, a.bluebook_issued_at, a.bluebook_expires_at,
-  a.operation_mode, a.route_from, a.route_to, a.operation_km,
+  a.operation_mode, a.operation_mode_label, a.operation_custom_fields,
+  a.route_from, a.route_to, a.operation_km,
   a.operation_place, a.operation_hours, a.operation_minutes`;
 
 function assetRegistryMap(row: Record<string, unknown>) {
@@ -17,6 +18,11 @@ function assetRegistryMap(row: Record<string, unknown>) {
     bluebook_issued_at: row.bluebook_issued_at,
     bluebook_expires_at: row.bluebook_expires_at,
     operation_mode: row.operation_mode,
+    operation_mode_label: row.operation_mode_label,
+    operation_custom_fields:
+      row.operation_custom_fields && typeof row.operation_custom_fields === "object"
+        ? row.operation_custom_fields
+        : {},
     route_from: row.route_from,
     route_to: row.route_to,
     operation_km: row.operation_km != null ? Number(row.operation_km) : null,

@@ -143,6 +143,24 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
       } else if (method === "PUT" && matchPath(segments, ["allocations", ":id", ":action"])) {
         const params = extractParams(["allocations", ":id", ":action"], segments);
         res = await transitionAllocation(pool, params.id, params.action);
+      } else if (method === "GET" && segments[0] === "vehicle-categories" && segments.length === 1) {
+        res = await listVehicleCategories(pool);
+      } else if (method === "POST" && segments[0] === "vehicle-categories" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createVehicleCategory(req, pool);
+      } else if (method === "GET" && segments[0] === "vehicle-departments" && segments.length === 1) {
+        res = await listVehicleDepartments(pool);
+      } else if (method === "POST" && segments[0] === "vehicle-departments" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createVehicleDepartment(req, pool);
+      } else if (method === "GET" && segments[0] === "operation-modes" && segments.length === 1) {
+        res = await listOperationModes(pool);
+      } else if (method === "POST" && segments[0] === "operation-modes" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createOperationMode(req, pool);
       } else if (method === "GET" && segments[0] === "locations" && segments.length === 1) {
         res = await listLocations(pool);
       } else if (method === "POST" && segments[0] === "locations" && segments.length === 1) {
@@ -419,7 +437,8 @@ async function listAssets(req: NextRequest, pool: import("pg").Pool, p: ReturnTy
     a.location_id, wl.name AS location_name, a.assigned_driver_id, u.name AS assigned_driver_name,
     a.vehicle_category, a.department, a.rta_office, a.alert_cell_number,
     a.registration_date, a.bluebook_no, a.bluebook_issued_at, a.bluebook_expires_at,
-    a.operation_mode, a.route_from, a.route_to, a.operation_km,
+    a.operation_mode, a.operation_mode_label, a.operation_custom_fields,
+    a.route_from, a.route_to, a.operation_km,
     a.operation_place, a.operation_hours, a.operation_minutes${from}${where} ORDER BY a.created_at DESC`;
   const { list, total } = await paginatedQuery(pool, p, `SELECT COUNT(*)::bigint AS count${from}${where}`, args, dataSQL, args, scanAssetRow);
   return ok(list, paginatedMeta(total, p));
@@ -430,14 +449,17 @@ async function createAsset(req: NextRequest, pool: import("pg").Pool) {
   const res = await pool.query(
     `INSERT INTO assets (asset_type, reg_serial_no, make, model, year, ownership_type, status, location_id,
       vehicle_category, department, rta_office, alert_cell_number, registration_date, bluebook_no, bluebook_issued_at, bluebook_expires_at,
-      operation_mode, route_from, route_to, operation_km, operation_place, operation_hours, operation_minutes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING asset_id`,
+      operation_mode, operation_mode_label, operation_custom_fields,
+      route_from, route_to, operation_km, operation_place, operation_hours, operation_minutes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING asset_id`,
     [
       body.asset_type, body.reg_serial_no, body.make, body.model, body.year,
       body.ownership_type, body.status, body.location_id,
       body.vehicle_category, body.department, body.rta_office, body.alert_cell_number,
       body.registration_date, body.bluebook_no, body.bluebook_issued_at, body.bluebook_expires_at,
-      body.operation_mode, body.route_from, body.route_to, body.operation_km,
+      body.operation_mode, body.operation_mode_label ?? null,
+      JSON.stringify(body.operation_custom_fields ?? {}),
+      body.route_from, body.route_to, body.operation_km,
       body.operation_place, body.operation_hours, body.operation_minutes,
     ]
   );
@@ -452,13 +474,16 @@ async function updateAsset(req: NextRequest, pool: import("pg").Pool, id: string
     `UPDATE assets SET asset_type=$1, reg_serial_no=$2, make=$3, model=$4, year=$5, ownership_type=$6, status=$7, location_id=$8,
       vehicle_category=$9, department=$10, rta_office=$11, alert_cell_number=$12, registration_date=$13,
       bluebook_no=$14, bluebook_issued_at=$15, bluebook_expires_at=$16,
-      operation_mode=$17, route_from=$18, route_to=$19, operation_km=$20,
-      operation_place=$21, operation_hours=$22, operation_minutes=$23 WHERE asset_id=$24`,
+      operation_mode=$17, operation_mode_label=$18, operation_custom_fields=$19,
+      route_from=$20, route_to=$21, operation_km=$22,
+      operation_place=$23, operation_hours=$24, operation_minutes=$25 WHERE asset_id=$26`,
     [
       body.asset_type, body.reg_serial_no, body.make, body.model, body.year, body.ownership_type, body.status, body.location_id,
       body.vehicle_category, body.department, body.rta_office, body.alert_cell_number, body.registration_date,
       body.bluebook_no, body.bluebook_issued_at, body.bluebook_expires_at,
-      body.operation_mode, body.route_from, body.route_to, body.operation_km,
+      body.operation_mode, body.operation_mode_label ?? null,
+      JSON.stringify(body.operation_custom_fields ?? {}),
+      body.route_from, body.route_to, body.operation_km,
       body.operation_place, body.operation_hours, body.operation_minutes, id,
     ]
   );
@@ -487,12 +512,43 @@ async function listAllocations(req: NextRequest, pool: import("pg").Pool, p: Ret
   return ok(list, paginatedMeta(total, p));
 }
 
+async function resolveAllocationLocationId(
+  pool: import("pg").Pool,
+  id?: string | null,
+  name?: string | null
+): Promise<string> {
+  if (id && String(id).trim()) return String(id).trim();
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) throw new Error("location is required");
+  const existing = await pool.query(
+    `SELECT location_id FROM work_locations
+     WHERE LOWER(TRIM(name)) = LOWER($1)
+     ORDER BY is_custom ASC, created_at ASC LIMIT 1`,
+    [trimmed]
+  );
+  if (existing.rows[0]?.location_id) return existing.rows[0].location_id;
+  const ins = await pool.query(
+    `INSERT INTO work_locations (name, type, address, is_custom) VALUES ($1, 'other', '', true) RETURNING location_id`,
+    [trimmed]
+  );
+  return ins.rows[0].location_id;
+}
+
 async function createAllocation(req: NextRequest, pool: import("pg").Pool) {
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body?.asset_id || !body?.driver_id) return badRequest("asset and driver are required");
+  let fromLocationId: string;
+  let toLocationId: string;
+  try {
+    fromLocationId = await resolveAllocationLocationId(pool, body.from_location_id, body.from_location_name);
+    toLocationId = await resolveAllocationLocationId(pool, body.to_location_id, body.to_location_name);
+  } catch (e) {
+    return badRequest((e as Error).message);
+  }
   const res = await pool.query(
     `INSERT INTO allocations (asset_id, from_location_id, to_location_id, driver_id, start_date, expected_return)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING alloc_id`,
-    [body.asset_id, body.from_location_id, body.to_location_id, body.driver_id, body.start_date, body.expected_return]
+    [body.asset_id, fromLocationId, toLocationId, body.driver_id, body.start_date, body.expected_return]
   );
   const id = res.rows[0].alloc_id;
   const alloc = await fetchAllocation(pool, id);
@@ -512,6 +568,165 @@ async function transitionAllocation(pool: import("pg").Pool, id: string, action:
   await pool.query(`UPDATE allocations SET state = $1 WHERE alloc_id = $2`, [state, id]);
   const alloc = await fetchAllocation(pool, id);
   return ok(alloc ?? { id, state });
+}
+
+const BUILTIN_VEHICLE_CATEGORIES = [
+  "Car",
+  "Van",
+  "Bus",
+  "Truck",
+  "Pickup",
+  "Trailer",
+  "Dozer",
+  "Bike",
+  "Other",
+];
+
+async function listVehicleCategories(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT category_id, name, description, operation_modes
+     FROM vehicle_category_catalog ORDER BY name`
+  );
+  const list = res.rows.map((r) => ({
+    id: r.category_id,
+    name: r.name,
+    description: r.description ?? "",
+    operation_modes: r.operation_modes,
+  }));
+  return ok(list);
+}
+
+async function createVehicleCategory(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  const modes = body?.operation_modes ?? "km";
+  if (!["km", "hour", "both"].includes(modes)) return badRequest("invalid operation_modes");
+  const reserved = BUILTIN_VEHICLE_CATEGORIES.some(
+    (c) => c.toLowerCase() === name.toLowerCase() && c !== "Other"
+  );
+  if (reserved) return badRequest("name matches a built-in category");
+  try {
+    const ins = await pool.query(
+      `INSERT INTO vehicle_category_catalog (name, description, operation_modes)
+       VALUES ($1, $2, $3) RETURNING category_id, name, description, operation_modes`,
+      [name, (body?.description ?? "").trim(), modes]
+    );
+    const r = ins.rows[0];
+    return created({
+      id: r.category_id,
+      name: r.name,
+      description: r.description ?? "",
+      operation_modes: r.operation_modes,
+    });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_vehicle_category_catalog_name_lower")) {
+      return badRequest("category name already exists");
+    }
+    throw e;
+  }
+}
+
+const BUILTIN_VEHICLE_DEPARTMENTS = [
+  "Transport",
+  "Operations",
+  "Maintenance",
+  "Administration",
+  "Executive",
+  "Other",
+];
+
+async function listVehicleDepartments(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT department_id, name, description FROM vehicle_departments ORDER BY name`
+  );
+  const list = res.rows.map((r) => ({
+    id: r.department_id,
+    name: r.name,
+    description: r.description ?? "",
+  }));
+  return ok(list);
+}
+
+async function createVehicleDepartment(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  const reserved = BUILTIN_VEHICLE_DEPARTMENTS.some(
+    (d) => d.toLowerCase() === name.toLowerCase() && d !== "Other"
+  );
+  if (reserved) return badRequest("name matches a built-in department");
+  try {
+    const ins = await pool.query(
+      `INSERT INTO vehicle_departments (name, description) VALUES ($1, $2)
+       RETURNING department_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({
+      id: r.department_id,
+      name: r.name,
+      description: r.description ?? "",
+    });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_vehicle_departments_name_lower")) {
+      return badRequest("department name already exists");
+    }
+    throw e;
+  }
+}
+
+const BUILTIN_OPERATION_MODE_LABELS = ["Route + KM", "Place + Hr / Min"];
+
+async function listOperationModes(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT mode_id, name, description, tracking_type, field_labels
+     FROM operation_mode_catalog ORDER BY name`
+  );
+  const list = res.rows.map((r) => ({
+    id: r.mode_id,
+    name: r.name,
+    description: r.description ?? "",
+    tracking_type: r.tracking_type,
+    field_labels: Array.isArray(r.field_labels) ? r.field_labels : [],
+  }));
+  return ok(list);
+}
+
+async function createOperationMode(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  const fieldLabels = Array.isArray(body?.field_labels)
+    ? body.field_labels.map((l: unknown) => String(l ?? "").trim()).filter(Boolean)
+    : [];
+  if (fieldLabels.length === 0) return badRequest("field_labels is required");
+  const reserved = BUILTIN_OPERATION_MODE_LABELS.some((l) => l.toLowerCase() === name.toLowerCase());
+  if (reserved) return badRequest("name matches a built-in operation mode");
+  try {
+    const ins = await pool.query(
+      `INSERT INTO operation_mode_catalog (name, description, tracking_type, field_labels)
+       VALUES ($1, $2, 'custom', $3::jsonb)
+       RETURNING mode_id, name, description, tracking_type, field_labels`,
+      [name, (body?.description ?? "").trim(), JSON.stringify(fieldLabels)]
+    );
+    const r = ins.rows[0];
+    return created({
+      id: r.mode_id,
+      name: r.name,
+      description: r.description ?? "",
+      tracking_type: r.tracking_type,
+      field_labels: Array.isArray(r.field_labels) ? r.field_labels : fieldLabels,
+    });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_operation_mode_catalog_name_lower")) {
+      return badRequest("operation mode name already exists");
+    }
+    throw e;
+  }
 }
 
 async function listLocations(pool: import("pg").Pool) {
@@ -535,9 +750,10 @@ async function createLocation(req: NextRequest, pool: import("pg").Pool) {
   const body = await req.json().catch(() => null);
   if (!body?.name) return badRequest("name is required");
   const mid = optionalUUID(body.manager_id);
+  const isCustom = body.is_custom === true || body.type === "other";
   const res = await pool.query(
-    `INSERT INTO work_locations (name, type, address, manager_id) VALUES ($1,$2,$3,$4) RETURNING location_id`,
-    [body.name, body.type || "construction", body.address ?? "", mid]
+    `INSERT INTO work_locations (name, type, address, manager_id, is_custom) VALUES ($1,$2,$3,$4,$5) RETURNING location_id`,
+    [body.name, body.type || "construction", body.address ?? "", mid, isCustom]
   );
   const loc = await fetchLocation(pool, res.rows[0].location_id);
   return created(loc);
