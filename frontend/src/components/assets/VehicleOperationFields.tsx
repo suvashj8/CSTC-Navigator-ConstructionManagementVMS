@@ -97,7 +97,7 @@ export function VehicleOperationFields({ assetType = "vehicle", vehicleCategory,
       {hourly ? (
         <>
           <div className={cn(DIALOG_FORM_FIELD, !showMode && "sm:col-span-2")}>
-            <Label>Operation place</Label>
+            <Label>Place</Label>
             <SearchableAutocomplete
               value={operation.operation_place}
               onChange={(v) => set("operation_place", v)}
@@ -107,7 +107,7 @@ export function VehicleOperationFields({ assetType = "vehicle", vehicleCategory,
             />
           </div>
           <div className={DIALOG_FORM_FIELD}>
-            <Label>Hours (Hr)</Label>
+            <Label>Hr</Label>
             <Input
               inputMode="numeric"
               placeholder="Hours"
@@ -116,7 +116,7 @@ export function VehicleOperationFields({ assetType = "vehicle", vehicleCategory,
             />
           </div>
           <div className={DIALOG_FORM_FIELD}>
-            <Label>Minutes (Min)</Label>
+            <Label>Min</Label>
             <Input
               inputMode="numeric"
               placeholder="0–59"

@@ -7,11 +7,10 @@ export function defaultOperationMode(vehicleCategory: string): OperationMode {
   return "km";
 }
 
-/** Dozer always hourly; Other can toggle; rest use route + KM. */
+/** Dozer is always hourly; any category uses place + Hr/Min when mode is `hour`. */
 export function usesHourlyOperation(vehicleCategory: string, operationMode: OperationMode): boolean {
   if (vehicleCategory === "Dozer") return true;
-  if (vehicleCategory === "Other") return operationMode === "hour";
-  return false;
+  return operationMode === "hour";
 }
 
 export function canChooseOperationMode(vehicleCategory: string): boolean {
