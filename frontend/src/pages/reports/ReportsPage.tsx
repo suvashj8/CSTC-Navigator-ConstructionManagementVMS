@@ -39,7 +39,7 @@ const reports = [
 export default function ReportsPage() {
   return (
     <PageShell title="Reports" description="Operational and compliance reports for fleet management.">
-      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 desktop:grid-cols-3">
         {reports.map(({ to, title, description, icon: Icon }) => (
           <Link key={to} to={to}>
             <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent/20">

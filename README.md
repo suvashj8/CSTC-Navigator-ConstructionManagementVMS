@@ -176,6 +176,7 @@ CSTC-Navigator-ConstructionManagementVMS/
 - Dashboard, fleet assets, allocations, locations, insurance, suppliers
 - **Operations** — fuel logs (km/L insights), maintenance work orders
 - **Platform console** — `/platform/login` → tenant management
+- **Responsive layout** — screens **&lt; 7 inches** (viewport &lt; 672px) use mobile UI (cards, sheet nav); **7 inches and larger** use desktop UI (sidebar, tables)
 - Mobile-friendly UI, PWA, Capacitor (`frontend/MOBILE.md`)
 
 ---
@@ -283,6 +284,7 @@ Open a pull request on GitHub against `main`.
 - `npm run doctor`, `npm run seed`, `docker-compose.linux.yml` (client ports **5000** / **6000**)
 - Demo login auto-seed on first sign-in; driver role sees dashboard, fleet, allocations
 - LAN dev via `npm run dev:full:host` with CORS for `192.168.x.x`
+- 7-inch responsive breakpoint: mobile layout below 672px width, desktop at/above (`frontend/src/lib/viewport.ts`)
 
 ### Next.js-only backend
 

@@ -57,8 +57,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid h-screen lg:min-h-screen lg:grid-cols-2 overflow-hidden">
-      <div className="relative hidden overflow-hidden bg-sidebar lg:flex lg:flex-col lg:justify-between lg:p-12">
+    <div className="grid h-screen desktop:min-h-screen desktop:grid-cols-2 overflow-hidden">
+      <div className="relative hidden overflow-hidden bg-sidebar desktop:flex desktop:flex-col desktop:justify-between desktop:p-12">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
         <div className="relative flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/40">
@@ -91,7 +91,7 @@ export default function LoginPage() {
       </div>
 
       <div className="flex flex-col items-center justify-center overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] mesh-bg sm:p-6">
-        <div className="mb-6 flex items-center gap-3 lg:hidden">
+        <div className="mb-6 flex items-center gap-3 desktop:hidden">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/30">
             <Truck className="h-5 w-5 text-primary-foreground" />
           </div>

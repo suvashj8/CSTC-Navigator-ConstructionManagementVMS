@@ -99,7 +99,7 @@ export default function MaintenancePage() {
         <Card>
           <CardContent className="space-y-4 pt-6">
             <h2 className="text-sm font-semibold">Work orders</h2>
-            <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid items-end gap-4 sm:grid-cols-2 desktop:grid-cols-4">
               <VehicleSelect value={vehicleId} onChange={setVehicleId} label="Vehicle" required />
               <div className="flex flex-col gap-2">
                 <Label className="h-5 leading-none">Description</Label>

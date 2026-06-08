@@ -11,13 +11,13 @@ export default function AppLayout() {
   return (
     <div className="flex h-screen bg-background">
       {/* Desktop sidebar — fixed width */}
-      <aside className="hidden shrink-0 lg:block">
+      <aside className="hidden shrink-0 desktop:block">
         <AppSidebar />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col h-screen overflow-hidden">
-        {/* Mobile / tablet top bar only (sidebar hidden) */}
-        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md sm:px-4 lg:hidden">
+        {/* Mobile layout (< 7 inch): hamburger + sheet nav */}
+        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md sm:px-4 desktop:hidden">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" aria-label="Open menu">
@@ -36,7 +36,7 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main className="mesh-bg min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 xl:p-10">
+        <main className="mesh-bg min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 desktop:p-8 xl:p-10">
           <Outlet />
         </main>
       </div>

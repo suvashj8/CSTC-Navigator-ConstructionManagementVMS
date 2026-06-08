@@ -381,7 +381,7 @@ export default function OperationsPage() {
             </DialogDescription>
           </DialogHeader>
           {editing && (
-            <DialogForm onSubmit={handleSubmit} className="overflow-visible lg:grid-cols-4">
+            <DialogForm onSubmit={handleSubmit} className="overflow-visible desktop:grid-cols-4">
               <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL, "rounded-lg border bg-muted/30 px-3 py-3 text-sm")}>
                 <div className="font-medium">
                   {editing.reg_serial_no} — {editing.make} {editing.model}

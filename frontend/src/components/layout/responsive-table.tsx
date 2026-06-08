@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { TableScroll } from "./table-scroll";
 
 /**
- * Card list on small phones; scrollable data table from md (768px) upward.
+ * Card list on mobile layout (< 7 inch); data table on desktop layout (7 inch+).
  */
 export function ResponsiveTable({
   desktop,
@@ -17,8 +17,8 @@ export function ResponsiveTable({
 }) {
   return (
     <div className={cn("min-w-0 w-full", className)}>
-      {mobile && <div className="md:hidden">{mobile}</div>}
-      <div className={cn("min-w-0 w-full", mobile ? "hidden md:block" : "block")}>
+      {mobile && <div className="desktop:hidden">{mobile}</div>}
+      <div className={cn("min-w-0 w-full", mobile ? "hidden desktop:block" : "block")}>
         <TableScroll scrollMinClass={scrollMinClass}>{desktop}</TableScroll>
       </div>
     </div>

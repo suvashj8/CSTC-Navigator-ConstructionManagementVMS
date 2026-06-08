@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
+import { isMobileLayout } from "./viewport";
 
 export type PlatformKind = "web" | "ios" | "android";
-
 export function getPlatform(): PlatformKind {
   const p = Capacitor.getPlatform();
   if (p === "ios") return "ios";
@@ -14,8 +14,6 @@ export const isIOS = Capacitor.getPlatform() === "ios";
 export const isAndroid = Capacitor.getPlatform() === "android";
 export const isWeb = !isNative;
 
-/** True for phone-sized native apps and narrow mobile browsers. */
-export function isMobileViewport() {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(max-width: 1023px)").matches;
+/** True when layout is mobile (< 7 inch equivalent viewport width). */export function isMobileViewport() {
+  return isMobileLayout();
 }

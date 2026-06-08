@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export type MobileCardField = { label: string; value: React.ReactNode };
 
 export function MobileCardList({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("grid gap-3 md:hidden", className)}>{children}</div>;
+  return <div className={cn("grid gap-3 desktop:hidden", className)}>{children}</div>;
 }
 
 export function MobileCard({

@@ -2,6 +2,8 @@
 @import "tailwindcss";
 
 @theme inline {
+  /* 42rem = 672px ≈ 7-inch screen width — mobile below, desktop at/above */
+  --breakpoint-desktop: 42rem;
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -111,8 +113,8 @@ html.platform-ios body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Larger touch targets on phones */
-@media (max-width: 1023px) {
+/* Larger touch targets on mobile layout (< 7 inch) */
+@media (max-width: 671px) {
   button,
   [role="button"],
   a {

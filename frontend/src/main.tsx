@@ -6,9 +6,12 @@ import { Toaster } from "@/components/ui/sonner";
 import App from "./App";
 import { initNativeShell } from "@/lib/native-init";
 import { isMobileViewport, isNative } from "@/lib/platform";
+import { syncViewportLayoutAttribute } from "@/lib/viewport";
 import "./index.css";
 
 void initNativeShell();
+syncViewportLayoutAttribute();
+window.addEventListener("resize", syncViewportLayoutAttribute);
 
 const qc = new QueryClient({
   defaultOptions: {

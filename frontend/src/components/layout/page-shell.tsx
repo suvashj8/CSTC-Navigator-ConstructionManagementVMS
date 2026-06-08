@@ -11,15 +11,15 @@ type PageShellProps = {
 export function PageShell({ title, description, actions, children, className }: PageShellProps) {
   return (
     <div className={cn("mx-auto min-w-0 w-full max-w-[1600px] space-y-4 sm:space-y-6", className)}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+      <div className="flex flex-col gap-3 desktop:flex-row desktop:items-start desktop:justify-between desktop:gap-6">
         <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="text-xl font-bold tracking-tight text-foreground lg:text-2xl">{title}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-foreground desktop:text-2xl">{title}</h1>
           {description && (
             <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
           )}
         </div>
         {actions && (
-          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end [&_button]:w-full sm:[&_button]:w-auto">
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap desktop:justify-end [&_button]:w-full sm:[&_button]:w-auto">
             {actions}
           </div>
         )}
