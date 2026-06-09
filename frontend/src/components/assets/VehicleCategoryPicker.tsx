@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { filterOptionsByQuery } from "@/data/nepalTransportOffices";
-import { SearchableAutocomplete } from "@/components/ui/searchable-autocomplete";
-import { Label } from "@/components/ui/label";
 import { AddVehicleCategoryDialog } from "@/components/assets/AddVehicleCategoryDialog";
+import { CatalogSelect } from "@/components/ui/catalog-select";
 import { useVehicleCategories } from "@/hooks/useVehicleCategories";
 import {
   defaultModeForCategory,
+  findCategoryInCatalog,
   VEHICLE_CATEGORY_OTHER,
   type VehicleCategoryMeta,
 } from "@/lib/vehicleCategory";
@@ -19,18 +18,21 @@ type Props = {
   showDropdownIcon?: boolean;
   hideHint?: boolean;
   className?: string;
+  categoryCatalog?: VehicleCategoryMeta[];
+  categoryNames?: string[];
 };
 
 export function VehicleCategoryPicker({
   value,
   onCategoryChange,
-  required,
   label = "Vehicle category",
-  showDropdownIcon = false,
   hideHint = false,
   className,
+  categoryCatalog: catalogProp,
 }: Props) {
-  const { catalog, names, findCategory } = useVehicleCategories();
+  const hook = useVehicleCategories(catalogProp === undefined);
+  const catalog = catalogProp ?? hook.catalog;
+  const findCategory = (name: string) => findCategoryInCatalog(name, catalog);
   const [addOpen, setAddOpen] = useState(false);
 
   const applyCategory = (name: string) => {
@@ -40,44 +42,17 @@ export function VehicleCategoryPicker({
 
   return (
     <>
-      <div className={className ?? "space-y-2"}>
-        <Label>{label}</Label>
-        <SearchableAutocomplete
-          showDropdownIcon={showDropdownIcon}
-          revealAllOnOpen
-          value={value}
-          onChange={(v) => {
-            if (!v.trim()) {
-              onCategoryChange("", undefined, "km");
-              return;
-            }
-            const exact = findCategory(v.trim());
-            if (exact) {
-              applyCategory(exact.name);
-            } else {
-              onCategoryChange(v, undefined, "km");
-            }
-          }}
-          onPick={(name) => {
-            if (name === VEHICLE_CATEGORY_OTHER) {
-              onCategoryChange("", undefined, "km");
-              setAddOpen(true);
-              return;
-            }
-            applyCategory(name);
-          }}
-          options={names}
-          placeholder=""
-          filterFn={filterOptionsByQuery}
-          required={required}
-        />
-        {!hideHint ? (
-          <p className="text-xs text-muted-foreground">
-            Type to search (e.g. T for Truck). Choose <strong>Other</strong> to add a custom category.
-          </p>
-        ) : null}
-      </div>
-
+      <CatalogSelect
+        className={className}
+        label={label}
+        value={value}
+        items={catalog.map((c) => ({ key: c.name, name: c.name }))}
+        otherLabel={VEHICLE_CATEGORY_OTHER}
+        onOther={() => setAddOpen(true)}
+        hideHint={hideHint}
+        hint={hideHint ? undefined : `Choose ${VEHICLE_CATEGORY_OTHER} to add a custom category.`}
+        onChange={applyCategory}
+      />
       <AddVehicleCategoryDialog
         open={addOpen}
         onOpenChange={setAddOpen}

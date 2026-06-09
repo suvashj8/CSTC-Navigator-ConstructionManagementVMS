@@ -1,0 +1,24 @@
+$kind: http-request
+name: Create Allocation
+method: POST
+url: '{{baseUrl}}/api/v1/allocations'
+order: 2000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "asset_ids": ["{{assetId}}"],
+      "receiver_role": "user",
+      "start_date": "2025-01-01",
+      "expected_return": "2025-01-31"
+    }

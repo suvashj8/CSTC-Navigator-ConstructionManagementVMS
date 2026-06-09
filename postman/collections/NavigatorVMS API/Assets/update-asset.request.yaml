@@ -1,0 +1,22 @@
+$kind: http-request
+name: Update Asset
+method: PUT
+url: '{{baseUrl}}/api/v1/assets/{{assetId}}'
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "make": "Toyota",
+      "model": "Hilux Updated"
+    }

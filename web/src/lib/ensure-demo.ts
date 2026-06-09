@@ -1,36 +1,83 @@
-import { DEMO_SUBDOMAIN } from "./demo-accounts";
-import { runSeed } from "./seed";
+import { runSeed, syncDemoAccounts, syncPlatformSuperUser } from "./seed";
 import type { TenantManager } from "./tenant-manager";
 
-let inflight: Promise<void> | null = null;
+let seedInflight: Promise<void> | null = null;
+let demoReady = false;
+let platformReady = false;
 
-function shouldAutoSeed(): boolean {
-  if (process.env.SEED_ON_STARTUP === "true") return true;
-  return process.env.NODE_ENV === "development";
-}
-
-/** Ensure demo tenant + admin exist before login (fixes race when API starts before Postgres). */
-export async function ensureDemoSeeded(tm: TenantManager): Promise<void> {
-  if (!shouldAutoSeed()) return;
-
-  try {
-    await tm.initMain();
-    await tm.syncConnectionHosts();
-    const info = await tm.bySubdomain(DEMO_SUBDOMAIN);
-    const pool = await tm.pool(info.id);
-    const r = await pool.query(
-      `SELECT 1 FROM users WHERE email = $1 AND status = 'active' LIMIT 1`,
-      ["admin@vms.local"]
-    );
-    if (r.rowCount && r.rowCount > 0) return;
-  } catch {
-    // missing tenant or DB not ready — seed below
-  }
-
-  if (!inflight) {
-    inflight = runSeed(tm).finally(() => {
-      inflight = null;
+async function runSeedOnce(tm: TenantManager): Promise<void> {
+  if (!seedInflight) {
+    seedInflight = runSeed(tm).finally(() => {
+      seedInflight = null;
     });
   }
-  await inflight;
+  await seedInflight;
+}
+
+type EnsureOpts = { force?: boolean };
+
+/**
+ * Ensure demo tenant accounts exist with correct passwords before login.
+ * Always syncs passwords when the demo tenant is present (fixes hash drift).
+ */
+export async function ensureDemoSeeded(tm: TenantManager, opts?: EnsureOpts): Promise<void> {
+  if (demoReady && !opts?.force) return;
+
+  try {
+    const synced = await syncDemoAccounts(tm);
+    if (synced) {
+      demoReady = true;
+      platformReady = true;
+      return;
+    }
+  } catch {
+    // tenant missing or DB not ready — full seed below
+  }
+
+  await runSeedOnce(tm);
+  demoReady = true;
+  platformReady = true;
+}
+
+/** Force password re-sync on demo login failure. */
+export async function repairDemoSeeded(tm: TenantManager): Promise<void> {
+  demoReady = false;
+  await ensureDemoSeeded(tm, { force: true });
+}
+
+/** Ensure platform super-user exists with the documented password. */
+export async function ensurePlatformSeeded(tm: TenantManager, opts?: EnsureOpts): Promise<void> {
+  if (platformReady && !opts?.force) return;
+
+  try {
+    await syncPlatformSuperUser(tm);
+    platformReady = true;
+    return;
+  } catch {
+    // main DB not ready — full seed below
+  }
+
+  await runSeedOnce(tm);
+  demoReady = true;
+  platformReady = true;
+}
+
+export async function repairPlatformSeeded(tm: TenantManager): Promise<void> {
+  platformReady = false;
+  await ensurePlatformSeeded(tm, { force: true });
+}
+
+/** Best-effort sync on API boot (no-op when demo tenant is absent). */
+export async function warmDemoOnStartup(tm: TenantManager): Promise<void> {
+  try {
+    const synced = await syncDemoAccounts(tm);
+    if (synced) {
+      demoReady = true;
+      platformReady = true;
+    }
+    await syncPlatformSuperUser(tm);
+    platformReady = true;
+  } catch {
+    // Docker/DB may not be up yet — login path will self-heal
+  }
 }

@@ -1,0 +1,13 @@
+$kind: http-request
+name: Cancel Allocation
+method: PUT
+url: '{{baseUrl}}/api/v1/allocations/{{allocationId}}/cancel'
+order: 7000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

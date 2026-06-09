@@ -1,0 +1,21 @@
+$kind: http-request
+name: Update Maintenance
+method: PUT
+url: '{{baseUrl}}/api/v1/maintenance/{{maintenanceId}}'
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "description": "Updated maintenance"
+    }

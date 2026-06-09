@@ -1,0 +1,19 @@
+$kind: http-request
+name: Update Tenant Status
+method: PUT
+url: '{{baseUrl}}/api/v1/platform/tenants/{{tenantId}}/status'
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{platformToken}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "active"
+    }

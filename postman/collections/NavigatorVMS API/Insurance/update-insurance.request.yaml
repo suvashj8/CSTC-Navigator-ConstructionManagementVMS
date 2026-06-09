@@ -1,0 +1,21 @@
+$kind: http-request
+name: Update Insurance
+method: PUT
+url: '{{baseUrl}}/api/v1/insurance/{{insuranceId}}'
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "policy_number": "POL-TEST-001-UPDATED"
+    }

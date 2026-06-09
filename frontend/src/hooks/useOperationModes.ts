@@ -12,7 +12,8 @@ export function useOperationModes(enabled = true) {
     queryKey: ["operation-modes"],
     queryFn: listOperationModes,
     enabled,
-    staleTime: 60_000,
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
   });
 
   const catalog = useMemo(() => mergeOperationModes(custom), [custom]);

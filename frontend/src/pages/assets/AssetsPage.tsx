@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { createAsset, deleteAsset, listAssets, updateAsset, type Asset } from "@/api/assets";
+import { createAsset, decommissionAsset, listAssets, permanentlyDeleteAsset, updateAsset, type Asset } from "@/api/assets";
 import { listLocations } from "@/api/locations";
 import { FilterRow, PageShell } from "@/components/layout/page-shell";
 import { PaginationBar } from "@/components/layout/pagination-bar";
@@ -38,6 +38,8 @@ import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AssetStatus, AssetType, OwnershipType } from "@/types/domain";
+import { AssetTypePicker } from "@/components/assets/AssetTypePicker";
+import { OwnershipTypePicker } from "@/components/assets/OwnershipTypePicker";
 import { VehicleCategoryPicker } from "@/components/assets/VehicleCategoryPicker";
 import {
   emptyVehicleFields,
@@ -47,8 +49,13 @@ import {
   type VehicleFieldState,
 } from "@/components/assets/VehicleAssetFields";
 import type { OperationMode } from "@/lib/vehicleOperation";
+import { useAssetTypes } from "@/hooks/useAssetTypes";
 import { useOperationModes } from "@/hooks/useOperationModes";
 import { useVehicleCategories } from "@/hooks/useVehicleCategories";
+import { useVehicleDepartments } from "@/hooks/useVehicleDepartments";
+import { ASSET_TYPE_OTHER, assetTypeDisplayLabel, isVehicleAssetType } from "@/lib/assetTypeCatalog";
+import { OWNERSHIP_TYPE_OTHER } from "@/lib/ownershipTypeCatalog";
+import { useOwnershipTypes } from "@/hooks/useOwnershipTypes";
 import {
   defaultOperationModePick,
   isHourlyFromOperationPick,
@@ -91,14 +98,19 @@ function assetToForm(a: Asset): FormState {
     ownership_type: a.ownership_type,
     status: a.status,
     location_id: a.location_id,
-    vehicle: a.asset_type === "vehicle" ? vehicleFieldsFromAsset(a) : emptyVehicleFields(),
+    vehicle: isVehicleAssetType(a.asset_type) ? vehicleFieldsFromAsset(a) : emptyVehicleFields(),
   };
 }
 
 export default function AssetsPage() {
   const qc = useQueryClient();
-  const { catalog } = useVehicleCategories();
-  const { catalog: operationCatalog } = useOperationModes();
+  const [modal, setModal] = useState<"create" | "edit" | null>(null);
+  const formOpen = modal !== null;
+  const { catalog, names: categoryNames } = useVehicleCategories(formOpen);
+  const { catalog: operationCatalog } = useOperationModes(formOpen);
+  const { catalog: departmentCatalog, names: departmentNames } = useVehicleDepartments(formOpen);
+  const { catalog: assetTypeCatalog } = useAssetTypes();
+  const { catalog: ownershipCatalog } = useOwnershipTypes();
   const [page, setPage] = useState(1);
   const perPage = DEFAULT_PER_PAGE;
   const [searchInput, setSearchInput] = useState("");
@@ -107,15 +119,20 @@ export default function AssetsPage() {
   useEffect(() => setPage(1), [search]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["assets", page, search],
+    queryKey: ["assets", "list", page, search],
     queryFn: () => listAssets({ page, per_page: perPage, search: search || undefined }),
+    staleTime: 120_000,
   });
-  const { data: locations = [] } = useQuery({ queryKey: ["locations"], queryFn: listLocations });
-
-  const [modal, setModal] = useState<"create" | "edit" | null>(null);
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: listLocations,
+    enabled: formOpen,
+    staleTime: 300_000,
+  });
   const [editing, setEditing] = useState<Asset | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<Asset | null>(null);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<Asset | null>(null);
 
   const locationName = useMemo(
     () => locations.find((l) => l.id === form.location_id)?.name,
@@ -129,7 +146,7 @@ export default function AssetsPage() {
     mutationFn: createAsset,
     onSuccess: () => {
       toast.success("Asset registered");
-      qc.invalidateQueries({ queryKey: ["assets"] });
+      qc.invalidateQueries({ queryKey: ["assets", "list"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setModal(null);
     },
@@ -140,19 +157,32 @@ export default function AssetsPage() {
     mutationFn: ({ id, body }: { id: string; body: Partial<Asset> }) => updateAsset(id, body),
     onSuccess: () => {
       toast.success("Asset updated");
-      qc.invalidateQueries({ queryKey: ["assets"] });
+      qc.invalidateQueries({ queryKey: ["assets", "list"] });
+      qc.invalidateQueries({ queryKey: ["assets", "operations"] });
       setModal(null);
       setEditing(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const delMut = useMutation({
-    mutationFn: deleteAsset,
+  const decommissionMut = useMutation({
+    mutationFn: decommissionAsset,
     onSuccess: () => {
       toast.success("Asset decommissioned");
-      qc.invalidateQueries({ queryKey: ["assets"] });
-      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["assets", "list"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      setRemoveTarget(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const permanentDeleteMut = useMutation({
+    mutationFn: permanentlyDeleteAsset,
+    onSuccess: () => {
+      toast.success("Asset permanently deleted");
+      qc.invalidateQueries({ queryKey: ["assets", "list"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      setPermanentDeleteTarget(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -179,7 +209,15 @@ export default function AssetsPage() {
       catalog,
       operationCatalog
     );
-    if (form.asset_type === "vehicle") {
+    if (!form.asset_type || form.asset_type === ASSET_TYPE_OTHER) {
+      toast.error("Select an asset type, or choose Other to add a custom one");
+      return;
+    }
+    if (!form.ownership_type || form.ownership_type === OWNERSHIP_TYPE_OTHER) {
+      toast.error("Select ownership, or choose Other to add a custom type");
+      return;
+    }
+    if (isVehicleAssetType(form.asset_type)) {
       if (!resolved.vehicle_category) {
         toast.error("Select a vehicle category (Car, Bus, Truck, etc.)");
         return;
@@ -325,7 +363,10 @@ export default function AssetsPage() {
                       title={r.reg_serial_no}
                       subtitle={`${r.make} ${r.model}`}
                       fields={[
-                        { label: "Type", value: r.asset_type },
+                        {
+                          label: "Type",
+                          value: assetTypeDisplayLabel(r.asset_type, assetTypeCatalog),
+                        },
                         { label: "Location", value: r.location_name ?? "—" },
                         { label: "Status", value: <AssetStatusBadge status={r.status} /> },
                       ]}
@@ -339,7 +380,7 @@ export default function AssetsPage() {
                               variant="ghost"
                               size="icon"
                               className="h-9 w-9 text-destructive"
-                              onClick={() => setDeleteTarget(r)}
+                              onClick={() => setRemoveTarget(r)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -387,10 +428,10 @@ export default function AssetsPage() {
                         <TableCell>
                           {r.make} {r.model} ({r.year})
                         </TableCell>
-                        <TableCell className="capitalize">
-                          {r.asset_type === "vehicle" && r.vehicle_category
-                            ? `${r.vehicle_category} · vehicle`
-                            : r.asset_type}
+                        <TableCell>
+                          {isVehicleAssetType(r.asset_type) && r.vehicle_category
+                            ? `${r.vehicle_category} · Vehicle`
+                            : assetTypeDisplayLabel(r.asset_type, assetTypeCatalog)}
                         </TableCell>
                         <TableCell>{r.location_name}</TableCell>
                         <TableCell>
@@ -406,7 +447,7 @@ export default function AssetsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-destructive hover:text-destructive"
-                                onClick={() => setDeleteTarget(r)}
+                                onClick={() => setRemoveTarget(r)}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
@@ -428,7 +469,7 @@ export default function AssetsPage() {
           <DialogHeader className="space-y-0.5 pr-8">
             <DialogTitle className="text-base">{modal === "edit" ? "Edit asset" : "Register asset"}</DialogTitle>
             <DialogDescription className="sr-only">
-              {form.asset_type === "vehicle"
+              {isVehicleAssetType(form.asset_type)
                 ? "Vehicle registry form"
                 : "Asset registration form"}
             </DialogDescription>
@@ -438,29 +479,20 @@ export default function AssetsPage() {
             className={cn(ASSET_REGISTER_FORM, ASSET_REGISTER_DENSITY)}
           >
             <div className={DIALOG_FORM_ROW}>
-              <div className={DIALOG_FORM_FIELD_COMPACT}>
-                <Label>Asset type</Label>
-                <Select
-                  value={form.asset_type}
-                  onValueChange={(v) => {
-                    const next = v as AssetType;
-                    setForm((f) => ({
-                      ...f,
-                      asset_type: next,
-                      vehicle: next === "vehicle" ? f.vehicle : emptyVehicleFields(),
-                    }));
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vehicle">Vehicle</SelectItem>
-                    <SelectItem value="equipment">Equipment</SelectItem>
-                    <SelectItem value="tool">Tool</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <AssetTypePicker
+                className={DIALOG_FORM_FIELD_COMPACT}
+                value={form.asset_type}
+                assetTypeCatalog={assetTypeCatalog}
+                hideHint
+                required
+                onChange={(key) => {
+                  setForm((f) => ({
+                    ...f,
+                    asset_type: key,
+                    vehicle: isVehicleAssetType(key) ? f.vehicle : emptyVehicleFields(),
+                  }));
+                }}
+              />
               <div className={DIALOG_FORM_FIELD_COMPACT}>
                 <Label>Reg / Serial</Label>
                 <Input
@@ -469,9 +501,11 @@ export default function AssetsPage() {
                   required
                 />
               </div>
-              {form.asset_type === "vehicle" ? (
+              {isVehicleAssetType(form.asset_type) ? (
                 <VehicleCategoryPicker
                   value={form.vehicle.vehicle_category}
+                  categoryCatalog={catalog}
+                  categoryNames={categoryNames}
                   onCategoryChange={(name, _meta, defaultMode: OperationMode) => {
                     const modePick = defaultOperationModePick(name, catalog);
                     setForm((f) => ({
@@ -499,13 +533,17 @@ export default function AssetsPage() {
               ) : null}
             </div>
 
-            {form.asset_type === "vehicle" ? (
+            {isVehicleAssetType(form.asset_type) ? (
               <VehicleAssetFields
                 compact
                 year={form.year}
                 onYearChange={(year) => setField("year", year)}
                 vehicle={form.vehicle}
                 onChange={(vehicle) => setForm((f) => ({ ...f, vehicle }))}
+                categoryCatalog={catalog}
+                departmentCatalog={departmentCatalog}
+                departmentNames={departmentNames}
+                operationCatalog={operationCatalog}
               />
             ) : (
               <>
@@ -521,25 +559,20 @@ export default function AssetsPage() {
             )}
 
             <div className={DIALOG_FORM_ROW}>
-              {form.asset_type !== "vehicle" ? (
+              {!isVehicleAssetType(form.asset_type) ? (
                 <div className={DIALOG_FORM_FIELD_COMPACT}>
                   <Label>Year</Label>
                   <Input type="number" value={form.year} onChange={(e) => setField("year", e.target.value)} required />
                 </div>
               ) : null}
-              <div className={DIALOG_FORM_FIELD_COMPACT}>
-                <Label>Ownership</Label>
-                <Select value={form.ownership_type} onValueChange={(v) => setField("ownership_type", v as OwnershipType)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="owned">Owned</SelectItem>
-                    <SelectItem value="leased">Leased</SelectItem>
-                    <SelectItem value="rented">Rented</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <OwnershipTypePicker
+                className={DIALOG_FORM_FIELD_COMPACT}
+                value={form.ownership_type}
+                catalog={ownershipCatalog}
+                hideHint
+                required
+                onChange={(key) => setField("ownership_type", key as OwnershipType)}
+              />
               <div className={DIALOG_FORM_FIELD_COMPACT}>
                 <Label>Work location</Label>
                 <Select value={form.location_id || undefined} onValueChange={(v) => setField("location_id", v)}>
@@ -591,21 +624,60 @@ export default function AssetsPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <AlertDialog open={!!removeTarget} onOpenChange={(o) => !o && setRemoveTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Decommission asset?</AlertDialogTitle>
+            <AlertDialogTitle>Remove asset?</AlertDialogTitle>
             <AlertDialogDescription>
-              This marks <strong>{deleteTarget?.reg_serial_no}</strong> as decommissioned.
+              Choose how to remove <strong>{removeTarget?.reg_serial_no}</strong>. Decommission keeps the record with
+              status &quot;Decommissioned&quot;. Delete permanently removes it from the system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel disabled={decommissionMut.isPending || permanentDeleteMut.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={decommissionMut.isPending || permanentDeleteMut.isPending}
+              onClick={() => removeTarget && decommissionMut.mutate(removeTarget.id)}
+            >
+              {decommissionMut.isPending ? "Decommissioning…" : "Decommission"}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={decommissionMut.isPending || permanentDeleteMut.isPending}
+              onClick={() => {
+                if (!removeTarget) return;
+                setPermanentDeleteTarget(removeTarget);
+                setRemoveTarget(null);
+              }}
+            >
+              Delete asset
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!permanentDeleteTarget} onOpenChange={(o) => !o && setPermanentDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete asset?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the asset <strong>{permanentDeleteTarget?.reg_serial_no}</strong>? A
+              permanently deleted asset cannot be recovered.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={permanentDeleteMut.isPending}>No</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteTarget && delMut.mutate(deleteTarget.id)}
+              disabled={permanentDeleteMut.isPending}
+              onClick={() => permanentDeleteTarget && permanentDeleteMut.mutate(permanentDeleteTarget.id)}
             >
-              Decommission
+              {permanentDeleteMut.isPending ? "Deleting…" : "Yes"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

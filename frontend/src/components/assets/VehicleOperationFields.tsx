@@ -1,11 +1,11 @@
 import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL } from "@/components/ui/dialog-form";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableAutocomplete } from "@/components/ui/searchable-autocomplete";
 import { OperationModePicker } from "@/components/assets/OperationModePicker";
 import { useOperationModes } from "@/hooks/useOperationModes";
 import { filterNepalPlacesByPrefix } from "@/data/nepalPlaces";
+import { isVehicleAssetType } from "@/lib/assetTypeCatalog";
 import type { AssetType } from "@/types/domain";
 import { type VehicleCategoryMeta } from "@/lib/vehicleCategory";
 import {
@@ -13,9 +13,9 @@ import {
   defaultOperationModePick,
   isDynamicCustomMode,
   isHourlyFromOperationPick,
-  needsOperationBasisToggle,
   ROUTE_KM_LABEL,
   shouldShowOperationModePicker,
+  type OperationModeMeta,
 } from "@/lib/operationModeCatalog";
 import { type OperationMode } from "@/lib/vehicleOperation";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,7 @@ type Props = {
   operation: OperationFieldState;
   onChange: (next: OperationFieldState) => void;
   compact?: boolean;
+  operationCatalog?: OperationModeMeta[];
 };
 
 const clearOperationValues = (): Pick<
@@ -81,8 +82,10 @@ export function VehicleOperationFields({
   operation,
   onChange,
   compact = false,
+  operationCatalog: catalogProp,
 }: Props) {
-  const { catalog: operationCatalog } = useOperationModes(assetType === "vehicle");
+  const hook = useOperationModes(isVehicleAssetType(assetType) && catalogProp === undefined);
+  const operationCatalog = catalogProp ?? hook.catalog;
   const fieldClass = compact ? "min-w-0 space-y-0.5" : DIALOG_FORM_FIELD;
   const pick =
     operation.operation_mode_pick ||
@@ -90,7 +93,7 @@ export function VehicleOperationFields({
   const dynamicFields = customFieldLabelsForPick(pick, operationCatalog);
   const isCustomDynamic = isDynamicCustomMode(pick, operationCatalog);
   const hourly =
-    assetType !== "vehicle"
+    !isVehicleAssetType(assetType)
       ? true
       : isHourlyFromOperationPick(
           pick,
@@ -102,10 +105,7 @@ export function VehicleOperationFields({
   const set = <K extends keyof OperationFieldState>(key: K, value: OperationFieldState[K]) =>
     onChange({ ...operation, [key]: value });
   const showModePicker =
-    assetType === "vehicle" && shouldShowOperationModePicker(assetType, vehicleCategory, categoryCatalog);
-  const showBasisToggle =
-    showModePicker &&
-    needsOperationBasisToggle(pick, vehicleCategory, categoryCatalog, operationCatalog);
+    isVehicleAssetType(assetType) && shouldShowOperationModePicker(assetType, vehicleCategory, categoryCatalog);
 
   const setCustomField = (label: string, value: string) => {
     onChange({
@@ -131,6 +131,8 @@ export function VehicleOperationFields({
               ? "Equipment — record where it is working and time in Hr / Min."
               : assetType === "tool"
                 ? "Tool — record usage place and time in Hr / Min."
+                : !isVehicleAssetType(assetType)
+                  ? "Custom asset — record usage place and time in Hr / Min."
                 : isCustomDynamic
                   ? "Custom mode — fill in the fields defined for this operation type."
                   : !vehicleCategory
@@ -149,6 +151,7 @@ export function VehicleOperationFields({
           value={pick}
           vehicleCategory={vehicleCategory}
           categoryCatalog={categoryCatalog}
+          operationCatalog={operationCatalog}
           showDropdownIcon
           hideHint={compact}
           onModeChange={(nextPick, mode, label) =>
@@ -161,30 +164,6 @@ export function VehicleOperationFields({
             })
           }
         />
-      )}
-
-      {showBasisToggle && (
-        <div className={fieldClass}>
-          <Label>Basis</Label>
-          <Select
-            value={operation.operation_mode === "custom" ? "km" : operation.operation_mode}
-            onValueChange={(v) =>
-              onChange({
-                ...operation,
-                operation_mode: v as OperationMode,
-                ...clearOperationValues(),
-              })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="km">Route + KM</SelectItem>
-              <SelectItem value="hour">Place + Hr / Min</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       )}
 
       {isCustomDynamic ? (
@@ -209,7 +188,7 @@ export function VehicleOperationFields({
         ))
       ) : hourly ? (
         <>
-          <div className={cn(fieldClass, !showModePicker && !showBasisToggle && !compact && "sm:col-span-2")}>
+          <div className={cn(fieldClass, !showModePicker && !compact && "sm:col-span-2")}>
             <Label>Place</Label>
             <SearchableAutocomplete
               value={operation.operation_place}

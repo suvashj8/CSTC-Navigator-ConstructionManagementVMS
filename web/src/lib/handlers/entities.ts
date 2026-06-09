@@ -79,32 +79,41 @@ export function scanAssetRow(r: Record<string, unknown>) {
   };
 }
 
-export async function fetchAllocation(pool: Pool, id: string) {
-  const res = await pool.query(
-    `SELECT al.alloc_id, al.asset_id, a.reg_serial_no || ' — ' || a.make || ' ' || a.model AS asset_label,
-            al.from_location_id, fl.name AS from_location_name, al.to_location_id, tl.name AS to_location_name,
-            al.driver_id, d.name AS driver_name, al.approved_by, al.state, al.start_date, al.expected_return, al.actual_return
-     FROM allocations al
+const allocationFromSql = ` FROM allocations al
      JOIN assets a ON a.asset_id = al.asset_id
      JOIN work_locations fl ON fl.location_id = al.from_location_id
      JOIN work_locations tl ON tl.location_id = al.to_location_id
-     JOIN users d ON d.user_id = al.driver_id
-     WHERE al.alloc_id = $1`,
-    [id]
-  );
-  const r = res.rows[0];
-  if (!r) return null;
+     LEFT JOIN users d ON d.user_id = al.driver_id
+     LEFT JOIN users recv ON recv.user_id = al.receiver_user_id`;
+
+const allocationSelectSql = `SELECT al.alloc_id, al.group_id, al.asset_id,
+    a.reg_serial_no || ' — ' || a.make || ' ' || a.model AS asset_label,
+    al.from_location_id, fl.name AS from_location_name, al.to_location_id, tl.name AS to_location_name,
+    al.driver_id, COALESCE(d.name, al.external_driver_name) AS driver_name,
+    al.external_driver_name, al.external_driver_contact,
+    al.receiver_user_id, al.receiver_role,
+    COALESCE(recv.name, al.receiver_name) AS receiver_name,
+    al.receiver_contact, al.approved_by, al.state, al.start_date, al.expected_return, al.actual_return`;
+
+function mapAllocationRow(r: Record<string, unknown>) {
   return {
     id: r.alloc_id,
+    group_id: r.group_id ?? null,
     asset_id: r.asset_id,
     asset_label: r.asset_label,
     from_location_id: r.from_location_id,
     from_location_name: r.from_location_name,
     to_location_id: r.to_location_id,
     to_location_name: r.to_location_name,
-    driver_id: r.driver_id,
-    driver_name: r.driver_name,
-    approved_by: r.approved_by,
+    driver_id: r.driver_id ?? null,
+    driver_name: r.driver_name ?? null,
+    external_driver_name: r.external_driver_name ?? null,
+    external_driver_contact: r.external_driver_contact ?? null,
+    receiver_user_id: r.receiver_user_id ?? null,
+    receiver_role: r.receiver_role ?? null,
+    receiver_name: r.receiver_name ?? null,
+    receiver_contact: r.receiver_contact ?? null,
+    approved_by: r.approved_by ?? null,
     state: r.state,
     start_date: datePtr(r.start_date),
     expected_return: datePtr(r.expected_return),
@@ -112,20 +121,32 @@ export async function fetchAllocation(pool: Pool, id: string) {
   };
 }
 
+export async function fetchAllocation(pool: Pool, id: string) {
+  const res = await pool.query(`${allocationSelectSql}${allocationFromSql} WHERE al.alloc_id = $1`, [id]);
+  const r = res.rows[0];
+  if (!r) return null;
+  return mapAllocationRow(r);
+}
+
 export function scanAllocationRow(r: Record<string, unknown>) {
+  const mapped = mapAllocationRow(r);
   return {
-    id: r.alloc_id,
-    asset_id: r.asset_id,
-    asset_label: r.asset_label,
-    from_location_id: r.from_location_id,
-    from_location_name: r.from_location_name,
-    to_location_id: r.to_location_id,
-    to_location_name: r.to_location_name,
-    driver_id: r.driver_id,
-    driver_name: r.driver_name,
-    state: r.state,
-    start_date: datePtr(r.start_date),
-    expected_return: datePtr(r.expected_return),
+    id: mapped.id,
+    group_id: mapped.group_id,
+    asset_id: mapped.asset_id,
+    asset_label: mapped.asset_label,
+    from_location_id: mapped.from_location_id,
+    from_location_name: mapped.from_location_name,
+    to_location_id: mapped.to_location_id,
+    to_location_name: mapped.to_location_name,
+    driver_id: mapped.driver_id,
+    driver_name: mapped.driver_name,
+    receiver_user_id: mapped.receiver_user_id,
+    receiver_role: mapped.receiver_role,
+    receiver_name: mapped.receiver_name,
+    state: mapped.state,
+    start_date: mapped.start_date,
+    expected_return: mapped.expected_return,
   };
 }
 
@@ -172,6 +193,7 @@ export async function fetchUser(pool: Pool, id: string) {
 export async function fetchDriver(pool: Pool, id: string) {
   const res = await pool.query(
     `SELECT d.driver_id, d.user_id, u.name, u.email, d.license_no, d.license_class, d.issue_date, d.expiry_date,
+      d.contact_phone, d.endorsements,
       CASE WHEN d.expiry_date < CURRENT_DATE THEN 'expired' WHEN d.expiry_date <= CURRENT_DATE + 60 THEN 'expiring' ELSE 'valid' END AS status
      FROM driver_profiles d JOIN users u ON u.user_id = d.user_id WHERE d.driver_id = $1`,
     [id]
@@ -187,6 +209,8 @@ export async function fetchDriver(pool: Pool, id: string) {
     license_class: r.license_class,
     issue_date: datePtr(r.issue_date),
     expiry_date: datePtr(r.expiry_date),
+    contact_phone: r.contact_phone ?? "",
+    endorsements: r.endorsements ?? "",
     status: r.status,
   };
 }

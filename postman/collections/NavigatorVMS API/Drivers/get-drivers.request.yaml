@@ -1,0 +1,18 @@
+$kind: http-request
+name: Get Drivers
+method: GET
+url: '{{baseUrl}}/api/v1/drivers'
+order: 1000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const d = pm.response.json(); if(d.data?.items?.length) pm.environment.set("driverId", d.data.items[0].id);

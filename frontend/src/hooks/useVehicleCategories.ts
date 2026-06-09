@@ -12,7 +12,8 @@ export function useVehicleCategories(enabled = true) {
     queryKey: ["vehicle-categories"],
     queryFn: listVehicleCategories,
     enabled,
-    staleTime: 60_000,
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
   });
 
   const catalog = useMemo(() => mergeVehicleCategories(custom), [custom]);

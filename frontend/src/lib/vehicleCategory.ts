@@ -20,13 +20,10 @@ export type CustomVehicleCategory = {
   operation_modes: CategoryOperationModes;
 };
 
-const BUILTIN_OPERATION_MODES: Record<string, CategoryOperationModes> = {
-  Dozer: "hour",
-  Other: "both",
-};
-
+/** Only Dozer is fixed hourly; all other categories use the operation-mode picker. */
 export function builtinOperationModes(name: string): CategoryOperationModes {
-  return BUILTIN_OPERATION_MODES[name] ?? "km";
+  if (name === "Dozer") return "hour";
+  return "both";
 }
 
 export function mergeVehicleCategories(custom: CustomVehicleCategory[]): VehicleCategoryMeta[] {

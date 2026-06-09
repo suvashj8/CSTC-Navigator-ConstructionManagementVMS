@@ -1,0 +1,10 @@
+$kind: http-request
+name: Trigger Expiry Scan
+method: POST
+url: '{{baseUrl}}/api/v1/platform/jobs/expiry-scan'
+order: 4000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{platformToken}}'

@@ -107,8 +107,9 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
     queryKey: ["notifications"],
     queryFn: listNotifications,
     enabled: !!user,
-    staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: 120_000,
+    refetchInterval: 10 * 60_000,
+    refetchIntervalInBackground: false,
   });
 
   const unread = unreadCount(notifications);

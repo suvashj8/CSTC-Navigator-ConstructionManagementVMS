@@ -1,0 +1,32 @@
+$kind: http-request
+name: Create Asset
+method: POST
+url: '{{baseUrl}}/api/v1/assets'
+order: 2000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "asset_type": "vehicle",
+      "reg_serial_no": "TEST-001",
+      "make": "Toyota",
+      "model": "Hilux",
+      "year": 2022,
+      "ownership_type": "owned",
+      "status": "available"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const d = pm.response.json(); if(d.data?.id) pm.environment.set("assetId", d.data.id);

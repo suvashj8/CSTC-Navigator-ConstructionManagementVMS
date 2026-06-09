@@ -1,0 +1,20 @@
+$kind: http-request
+name: Create Tenant
+method: POST
+url: '{{baseUrl}}/api/v1/platform/tenants'
+order: 2000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{platformToken}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Test Tenant",
+      "subdomain": "test-tenant"
+    }

@@ -1,0 +1,13 @@
+$kind: http-request
+name: Download Report
+method: GET
+url: '{{baseUrl}}/api/v1/reports/jobs/{{reportJobId}}/download'
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

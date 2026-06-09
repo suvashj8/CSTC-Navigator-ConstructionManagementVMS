@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { filterOptionsByQuery } from "@/data/nepalTransportOffices";
-import { SearchableAutocomplete } from "@/components/ui/searchable-autocomplete";
-import { Label } from "@/components/ui/label";
 import { AddVehicleDepartmentDialog } from "@/components/assets/AddVehicleDepartmentDialog";
+import { CatalogSelect } from "@/components/ui/catalog-select";
 import { useVehicleDepartments } from "@/hooks/useVehicleDepartments";
-import { VEHICLE_DEPARTMENT_OTHER, type VehicleDepartmentMeta } from "@/lib/vehicleDepartment";
+import {
+  findDepartmentInCatalog,
+  VEHICLE_DEPARTMENT_OTHER,
+  type VehicleDepartmentMeta,
+} from "@/lib/vehicleDepartment";
 
 type Props = {
   value: string;
@@ -14,61 +16,38 @@ type Props = {
   showDropdownIcon?: boolean;
   hideHint?: boolean;
   className?: string;
+  departmentCatalog?: VehicleDepartmentMeta[];
+  departmentNames?: string[];
 };
 
 export function VehicleDepartmentPicker({
   value,
   onChange,
-  required,
   label = "Department",
-  showDropdownIcon = false,
   hideHint = false,
   className,
+  departmentCatalog: catalogProp,
 }: Props) {
-  const { catalog, names, findDepartment } = useVehicleDepartments();
+  const hook = useVehicleDepartments(catalogProp === undefined);
+  const catalog = catalogProp ?? hook.catalog;
   const [addOpen, setAddOpen] = useState(false);
-
-  const applyDepartment = (name: string) => {
-    const meta = findDepartment(name);
-    onChange(meta?.name ?? name);
-  };
 
   return (
     <>
-      <div className={className ?? "space-y-2"}>
-        <Label>{label}</Label>
-        <SearchableAutocomplete
-          showDropdownIcon={showDropdownIcon}
-          revealAllOnOpen
-          value={value}
-          onChange={(v) => {
-            if (!v.trim()) {
-              onChange("");
-              return;
-            }
-            const exact = findDepartment(v.trim());
-            onChange(exact?.name ?? v);
-          }}
-          onPick={(name) => {
-            if (name === VEHICLE_DEPARTMENT_OTHER) {
-              onChange("");
-              setAddOpen(true);
-              return;
-            }
-            applyDepartment(name);
-          }}
-          options={names}
-          placeholder=""
-          filterFn={filterOptionsByQuery}
-          required={required}
-        />
-        {!hideHint ? (
-          <p className="text-xs text-muted-foreground">
-            Type to search. Choose <strong>Other</strong> to add a custom department.
-          </p>
-        ) : null}
-      </div>
-
+      <CatalogSelect
+        className={className}
+        label={label}
+        value={value}
+        items={catalog.map((d) => ({ key: d.name, name: d.name }))}
+        otherLabel={VEHICLE_DEPARTMENT_OTHER}
+        onOther={() => setAddOpen(true)}
+        hideHint={hideHint}
+        hint={hideHint ? undefined : `Choose ${VEHICLE_DEPARTMENT_OTHER} to add a custom department.`}
+        onChange={(name) => {
+          const meta = findDepartmentInCatalog(name, catalog);
+          onChange(meta?.name ?? name);
+        }}
+      />
       <AddVehicleDepartmentDialog
         open={addOpen}
         onOpenChange={setAddOpen}

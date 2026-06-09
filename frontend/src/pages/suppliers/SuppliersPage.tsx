@@ -21,15 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { SupplierCategoryPicker } from "@/components/suppliers/SupplierCategoryPicker";
+import { useSupplierCategories } from "@/hooks/useSupplierCategories";
+import { SUPPLIER_CATEGORY_OTHER, supplierCategoryDisplayLabel } from "@/lib/supplierCategoryCatalog";
 import type { Supplier, SupplierCategory } from "@/types/domain";
-
-const SUPPLIER_CATEGORIES: { value: SupplierCategory; label: string }[] = [
-  { value: "repair", label: "Repair shop" },
-  { value: "parts", label: "Parts vendor" },
-  { value: "fuel", label: "Fuel depot" },
-  { value: "rental", label: "Rental partner" },
-  { value: "other", label: "Other" },
-];
 
 type SupplierForm = {
   name: string;
@@ -71,6 +66,8 @@ export default function SuppliersPage() {
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [form, setForm] = useState<SupplierForm>(emptyForm());
+  const modalOpen = modal !== null;
+  const { catalog: categoryCatalog } = useSupplierCategories(modalOpen);
 
   useEffect(() => setPage(1), [search]);
 
@@ -136,6 +133,10 @@ export default function SuppliersPage() {
     e.preventDefault();
     if (!form.name.trim()) {
       toast.error("Supplier name is required");
+      return;
+    }
+    if (!form.category || form.category === SUPPLIER_CATEGORY_OTHER) {
+      toast.error("Select a category, or choose Other to add a custom one");
       return;
     }
     const body = buildBody();
@@ -205,7 +206,7 @@ export default function SuppliersPage() {
                   <MobileCard
                     key={s.id}
                     title={s.name}
-                    subtitle={s.category}
+                    subtitle={supplierCategoryDisplayLabel(s.category, categoryCatalog)}
                     fields={[
                       { label: "Contact", value: s.contact_name || "—" },
                       { label: "Phone", value: s.phone || "—" },
@@ -250,7 +251,7 @@ export default function SuppliersPage() {
                   {rows.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell className="capitalize">{s.category}</TableCell>
+                      <TableCell>{supplierCategoryDisplayLabel(s.category, categoryCatalog)}</TableCell>
                       <TableCell>{s.contact_name}</TableCell>
                       <TableCell>{s.phone}</TableCell>
                       <TableCell>{s.rating}/5</TableCell>
@@ -285,21 +286,13 @@ export default function SuppliersPage() {
               <Label>Company name</Label>
               <Input value={form.name} onChange={(e) => setField("name", e.target.value)} required />
             </div>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Category</Label>
-              <Select value={form.category} onValueChange={(v) => setField("category", v as SupplierCategory)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPLIER_CATEGORIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <SupplierCategoryPicker
+              className={DIALOG_FORM_FIELD}
+              value={form.category}
+              catalog={categoryCatalog}
+              hideHint
+              onChange={(key) => setField("category", key as SupplierCategory)}
+            />
             <div className={DIALOG_FORM_FIELD}>
               <Label>Rating (1–5)</Label>
               <Select value={form.rating} onValueChange={(v) => setField("rating", v)}>

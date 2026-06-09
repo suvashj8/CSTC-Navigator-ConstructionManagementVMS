@@ -7,10 +7,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { CategoryOperationModes, VehicleCategoryMeta } from "@/lib/vehicleCategory";
+import type { VehicleCategoryMeta } from "@/lib/vehicleCategory";
 import { isReservedBuiltinCategoryName } from "@/lib/vehicleCategory";
 
 type Props = {
@@ -22,7 +21,6 @@ type Props = {
 const emptyForm = () => ({
   name: "",
   description: "",
-  operation_modes: "both" as CategoryOperationModes,
 });
 
 export function AddVehicleCategoryDialog({ open, onOpenChange, onCreated }: Props) {
@@ -59,7 +57,8 @@ export function AddVehicleCategoryDialog({ open, onOpenChange, onCreated }: Prop
         <DialogHeader>
           <DialogTitle>Add vehicle category</DialogTitle>
           <DialogDescription>
-            Register a custom category (e.g. Crane, Mixer). Choose how it will be tracked in operations.
+            Register a custom category (e.g. Crane, Mixer). Operation mode is chosen separately when recording
+            usage.
           </DialogDescription>
         </DialogHeader>
         <DialogForm
@@ -77,7 +76,6 @@ export function AddVehicleCategoryDialog({ open, onOpenChange, onCreated }: Prop
             createMut.mutate({
               name,
               description: form.description.trim(),
-              operation_modes: form.operation_modes,
             });
           }}
         >
@@ -97,25 +95,6 @@ export function AddVehicleCategoryDialog({ open, onOpenChange, onCreated }: Prop
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               rows={3}
             />
-          </div>
-          <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
-            <Label>Operation tracking for this category</Label>
-            <Select
-              value={form.operation_modes}
-              onValueChange={(v) => setForm((f) => ({ ...f, operation_modes: v as CategoryOperationModes }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="km">Route + KM only</SelectItem>
-                <SelectItem value="hour">Place + Hr / Min only</SelectItem>
-                <SelectItem value="both">Both — choose per trip later</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              “Both” shows Route+KM and Place+Hr/Min when recording operations for vehicles in this category.
-            </p>
           </div>
           <Button type="submit" className={DIALOG_FORM_FULL} disabled={createMut.isPending}>
             {createMut.isPending ? "Saving…" : "Save category"}

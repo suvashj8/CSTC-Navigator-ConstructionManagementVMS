@@ -3,6 +3,9 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
+/** Marker for dialog outside-click guards (legacy portaled lists). */
+export const VMS_AUTOCOMPLETE_LIST_ATTR = "data-vms-autocomplete-list";
+
 type Props = {
   value: string;
   onChange: (next: string) => void;
@@ -12,12 +15,9 @@ type Props = {
   maxSuggestions?: number;
   id?: string;
   required?: boolean;
-  /** Show chevron like a select — click to open suggestions. */
   showDropdownIcon?: boolean;
-  /** Called when user picks a suggestion (not on free typing). */
   onPick?: (value: string) => void;
   filterFn?: (options: readonly string[], query: string, limit: number) => string[];
-  /** When true, focus or chevron shows the full option list until the user edits the text. */
   revealAllOnOpen?: boolean;
 };
 
@@ -27,7 +27,7 @@ export function SearchableAutocomplete({
   options,
   placeholder = "Type to search…",
   disabled = false,
-  maxSuggestions = 12,
+  maxSuggestions = 20,
   id,
   required,
   showDropdownIcon = false,
@@ -42,17 +42,13 @@ export function SearchableAutocomplete({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const [revealAll, setRevealAll] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
 
-  const defaultFilter = useCallback(
-    (opts: readonly string[], q: string, limit: number) => {
-      const query = q.trim().toLowerCase();
-      if (!query) return [...opts].slice(0, limit);
-      return opts
-        .filter((o) => o.toLowerCase().includes(query) || o.toLowerCase().startsWith(query))
-        .slice(0, limit);
-    },
-    []
-  );
+  const defaultFilter = useCallback((opts: readonly string[], q: string, limit: number) => {
+    const query = q.trim().toLowerCase();
+    if (!query) return [...opts].slice(0, limit);
+    return opts.filter((o) => o.toLowerCase().includes(query)).slice(0, limit);
+  }, []);
 
   const filter = filterFn ?? defaultFilter;
   const filterQuery = revealAllOnOpen && revealAll ? "" : value;
@@ -61,20 +57,46 @@ export function SearchableAutocomplete({
     [filter, options, filterQuery, maxSuggestions]
   );
 
+  const updateOpenDirection = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    setOpenUp(spaceBelow < 200 && spaceAbove > spaceBelow);
+  }, []);
+
   useEffect(() => {
     setHighlight(0);
   }, [value, filterQuery, suggestions.length]);
 
-  const close = useCallback(() => setOpen(false), []);
+  useEffect(() => {
+    if (!open) return;
+    updateOpenDirection();
+    const onScrollOrResize = () => updateOpenDirection();
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    return () => {
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+    };
+  }, [open, suggestions.length, updateOpenDirection]);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setRevealAll(false);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      const el = containerRef.current;
-      if (el && e.target instanceof Node && !el.contains(e.target)) close();
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+      if (containerRef.current?.contains(target)) return;
+      close();
     };
-    document.addEventListener("mousedown", onDoc, true);
-    return () => document.removeEventListener("mousedown", onDoc, true);
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
   }, [open, close]);
 
   const showPanel = open && suggestions.length > 0;
@@ -83,6 +105,12 @@ export function SearchableAutocomplete({
     onChange(name);
     onPick?.(name);
     close();
+  };
+
+  const openList = () => {
+    if (revealAllOnOpen) setRevealAll(true);
+    updateOpenDirection();
+    setOpen(true);
   };
 
   return (
@@ -106,11 +134,12 @@ export function SearchableAutocomplete({
           onChange(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => {
-          if (revealAllOnOpen) setRevealAll(true);
-          setOpen(true);
-        }}
+        onFocus={openList}
         onKeyDown={(e) => {
+          if (!showPanel && (e.key === "ArrowDown" || e.key === "Enter")) {
+            openList();
+            return;
+          }
           if (!showPanel) return;
           if (e.key === "Escape") {
             e.preventDefault();
@@ -142,8 +171,8 @@ export function SearchableAutocomplete({
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50"
           onMouseDown={(e) => {
             e.preventDefault();
-            if (revealAllOnOpen) setRevealAll(true);
-            setOpen((o) => !o);
+            if (open) close();
+            else openList();
             inputRef.current?.focus();
           }}
         >
@@ -154,7 +183,11 @@ export function SearchableAutocomplete({
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-[100] mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
+          {...{ [VMS_AUTOCOMPLETE_LIST_ATTR]: "" }}
+          className={cn(
+            "absolute left-0 right-0 z-[300] max-h-56 overflow-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-lg",
+            openUp ? "bottom-full mb-1" : "top-full mt-1"
+          )}
         >
           {suggestions.map((name, idx) => (
             <li

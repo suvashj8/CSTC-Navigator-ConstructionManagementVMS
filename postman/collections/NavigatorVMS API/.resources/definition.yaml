@@ -1,0 +1,36 @@
+$kind: collection
+name: NavigatorVMS API
+description: Comprehensive API collection for the NavigatorVMS project covering all backend routes.
+variables:
+  - key: baseUrl
+    value: 'http://localhost:3000'
+  - key: tenantSubdomain
+    value: demo
+  - key: tenantToken
+    value: ''
+  - key: platformToken
+    value: ''
+  - key: assetId
+    value: ''
+  - key: allocationId
+    value: ''
+  - key: locationId
+    value: ''
+  - key: userId
+    value: ''
+  - key: driverId
+    value: ''
+  - key: insuranceId
+    value: ''
+  - key: supplierId
+    value: ''
+  - key: fuelLogId
+    value: ''
+  - key: maintenanceId
+    value: ''
+  - key: notificationId
+    value: ''
+  - key: reportJobId
+    value: ''
+  - key: tenantId
+    value: ''

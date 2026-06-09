@@ -31,7 +31,14 @@ export function apiErrorMessage(err: unknown): string {
     const res = (err as { response?: { data?: ApiEnvelope<unknown>; status?: number } }).response;
     const msg = res?.data?.error?.message;
     if (msg) return msg;
-    if (res?.status) return `Request failed (${res.status})`;
+    const status = res?.status;
+    if (status === 503) {
+      return "Database not ready — start Docker, then run npm run dev:full:host from the project root.";
+    }
+    if (status === 500 || status === 502 || status === 504) {
+      return "Cannot reach API. Start Docker, then run npm run dev:full:host from the project root.";
+    }
+    if (status) return `Request failed (${status})`;
   }
   if (err && typeof err === "object" && "code" in err) {
     const code = (err as { code?: string }).code;

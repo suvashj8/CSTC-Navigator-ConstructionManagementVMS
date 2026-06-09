@@ -1,0 +1,21 @@
+$kind: http-request
+name: Create Maintenance Status
+method: POST
+url: '{{baseUrl}}/api/v1/maintenance-statuses'
+order: 12000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Test Status"
+    }

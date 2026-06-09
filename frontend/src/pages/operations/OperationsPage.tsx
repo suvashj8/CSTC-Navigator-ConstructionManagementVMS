@@ -14,8 +14,10 @@ import {
 } from "@/components/assets/VehicleOperationFields";
 import { VehicleCategoryPicker } from "@/components/assets/VehicleCategoryPicker";
 import { vehicleFieldsFromAsset } from "@/components/assets/VehicleAssetFields";
+import { useAssetTypes } from "@/hooks/useAssetTypes";
 import { useOperationModes } from "@/hooks/useOperationModes";
 import { useVehicleCategories } from "@/hooks/useVehicleCategories";
+import { isVehicleAssetType } from "@/lib/assetTypeCatalog";
 import {
   defaultOperationModePick,
   isHourlyFromOperationPick,
@@ -43,18 +45,17 @@ import { Badge } from "@/components/ui/badge";
 import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui/dialog-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AssetType } from "@/types/domain";
-
 export default function OperationsPage() {
   const qc = useQueryClient();
-  const { catalog } = useVehicleCategories();
-  const { catalog: operationCatalog } = useOperationModes();
+  const [open, setOpen] = useState(false);
+  const { catalog } = useVehicleCategories(open);
+  const { catalog: operationCatalog } = useOperationModes(open);
+  const { catalog: assetTypeCatalog } = useAssetTypes();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | AssetType>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [modeFilter, setModeFilter] = useState<"all" | "km" | "hour">("all");
-  const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [editCategory, setEditCategory] = useState("");
   const [operation, setOperation] = useState<OperationFieldState>(emptyOperationFields());
@@ -73,6 +74,7 @@ export default function OperationsPage() {
         operational_only: true,
         asset_type: typeFilter === "all" ? undefined : typeFilter,
       }),
+    staleTime: 120_000,
   });
 
   const filteredAssets = useMemo(() => {
@@ -90,7 +92,8 @@ export default function OperationsPage() {
     mutationFn: ({ id, body }: { id: string; body: Partial<Asset> }) => updateAsset(id, body),
     onSuccess: () => {
       toast.success("Operation recorded");
-      qc.invalidateQueries({ queryKey: ["assets"] });
+      qc.invalidateQueries({ queryKey: ["assets", "operations"] });
+      qc.invalidateQueries({ queryKey: ["assets", "list"] });
       setOpen(false);
       setEditing(null);
     },
@@ -124,7 +127,7 @@ export default function OperationsPage() {
     e.preventDefault();
     if (!editing) return;
 
-    if (editing.asset_type === "vehicle") {
+    if (isVehicleAssetType(editing.asset_type)) {
       const category = resolvedCategory(editing);
       if (!category) {
         toast.error("Select a vehicle category before saving the operation");
@@ -138,7 +141,7 @@ export default function OperationsPage() {
 
     const category = resolvedCategory(editing);
     const resolved = resolveAssetOperation(editing, category, operation, catalog, operationCatalog);
-    if (editing.asset_type === "vehicle") {
+    if (isVehicleAssetType(editing.asset_type)) {
       const pick = operation.operation_mode_pick || defaultOperationModePick(category, catalog);
       if (pick === OPERATION_MODE_OTHER || !pick.trim()) {
         toast.error("Choose Other to add a custom operation mode, or pick an existing one");
@@ -242,6 +245,13 @@ export default function OperationsPage() {
             <SelectItem value="vehicle">Vehicles</SelectItem>
             <SelectItem value="equipment">Equipment</SelectItem>
             <SelectItem value="tool">Tools</SelectItem>
+            {assetTypeCatalog
+              .filter((t) => t.isCustom)
+              .map((t) => (
+                <SelectItem key={t.key} value={t.key}>
+                  {t.name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
         <Select
@@ -280,9 +290,9 @@ export default function OperationsPage() {
                   <MobileCard
                     key={a.id}
                     title={a.reg_serial_no}
-                    subtitle={`${a.make} ${a.model} · ${formatAssetTypeDetail(a)}`}
+                    subtitle={`${a.make} ${a.model} · ${formatAssetTypeDetail(a, assetTypeCatalog)}`}
                     fields={[
-                      { label: "Type", value: assetTypeLabel(a.asset_type) },
+                      { label: "Type", value: assetTypeLabel(a.asset_type, assetTypeCatalog) },
                       { label: "Mode", value: operationModeLabel(a) },
                       { label: "Operation", value: formatOperationSummary(a) },
                       { label: "Site", value: a.location_name ?? "—" },
@@ -337,8 +347,8 @@ export default function OperationsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div>{assetTypeLabel(a.asset_type)}</div>
-                        {a.asset_type === "vehicle" && a.vehicle_category && (
+                        <div>{assetTypeLabel(a.asset_type, assetTypeCatalog)}</div>
+                        {isVehicleAssetType(a.asset_type) && a.vehicle_category && (
                           <div className="text-xs text-muted-foreground">{a.vehicle_category}</div>
                         )}
                       </TableCell>
@@ -423,18 +433,19 @@ export default function OperationsPage() {
                   {editing.reg_serial_no} — {editing.make} {editing.model}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
-                  <span>Type: {assetTypeLabel(editing.asset_type)}</span>
-                  {editing.asset_type === "vehicle" && editing.vehicle_category && (
+                  <span>Type: {assetTypeLabel(editing.asset_type, assetTypeCatalog)}</span>
+                  {isVehicleAssetType(editing.asset_type) && editing.vehicle_category && (
                     <span>Category: {editing.vehicle_category}</span>
                   )}
                   <span>Site: {editing.location_name ?? "—"}</span>
                 </div>
               </div>
 
-              {editing.asset_type === "vehicle" && !editing.vehicle_category ? (
+              {isVehicleAssetType(editing.asset_type) && !editing.vehicle_category ? (
                 <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
                   <VehicleCategoryPicker
                     value={editCategory}
+                    categoryCatalog={catalog}
                     onCategoryChange={(name, _meta, defaultMode) => {
                       setEditCategory(name);
                       setOperation({
@@ -454,6 +465,7 @@ export default function OperationsPage() {
                 assetType={editing.asset_type}
                 vehicleCategory={resolvedCategory(editing)}
                 categoryCatalog={catalog}
+                operationCatalog={operationCatalog}
                 operation={operation}
                 onChange={setOperation}
               />

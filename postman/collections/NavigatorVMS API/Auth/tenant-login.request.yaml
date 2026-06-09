@@ -1,0 +1,24 @@
+$kind: http-request
+name: Tenant Login
+method: POST
+url: '{{baseUrl}}/api/v1/auth/login'
+order: 1000
+auth:
+  type: noauth
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+body:
+  type: json
+  content: |-
+    {
+      "email": "admin@vms.local",
+      "password": "admin123"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.environment.set("tenantToken", pm.response.json().data?.access_token ?? "");

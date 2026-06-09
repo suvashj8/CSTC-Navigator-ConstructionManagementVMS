@@ -1,0 +1,13 @@
+$kind: http-request
+name: Get Vehicle Categories
+method: GET
+url: '{{baseUrl}}/api/v1/vehicle-categories'
+order: 1000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

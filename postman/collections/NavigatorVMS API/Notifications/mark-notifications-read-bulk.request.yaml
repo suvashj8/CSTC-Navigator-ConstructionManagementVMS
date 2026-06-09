@@ -1,0 +1,21 @@
+$kind: http-request
+name: Mark Notifications Read (Bulk)
+method: POST
+url: '{{baseUrl}}/api/v1/notifications/mark-read'
+order: 1500
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "ids": []
+    }

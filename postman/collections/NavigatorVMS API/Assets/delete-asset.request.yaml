@@ -1,0 +1,13 @@
+$kind: http-request
+name: Delete Asset
+method: DELETE
+url: '{{baseUrl}}/api/v1/assets/{{assetId}}'
+order: 4000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

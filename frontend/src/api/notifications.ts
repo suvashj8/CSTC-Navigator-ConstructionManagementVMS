@@ -22,6 +22,21 @@ export async function markNotificationRead(id: string) {
   await api.put(`/api/v1/notifications/${id}/read`);
 }
 
+/** Mark specific notifications read, or all unread when ids is empty. */
+export async function markNotificationsReadBulk(ids: string[] = []) {
+  if (useMock) {
+    await delay(100);
+    if (ids.length === 0) {
+      mockNotifications = mockNotifications.map((n) => ({ ...n, read: true }));
+    } else {
+      const idSet = new Set(ids);
+      mockNotifications = mockNotifications.map((n) => (idSet.has(n.id) ? { ...n, read: true } : n));
+    }
+    return;
+  }
+  await api.post("/api/v1/notifications/mark-read", { ids });
+}
+
 export function unreadCount(notifications: AppNotification[]) {
   return notifications.filter((n) => !n.read).length;
 }

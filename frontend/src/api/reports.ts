@@ -42,6 +42,14 @@ function mockJob(reportType: string, exportFormat: string): ReportJob {
   };
 }
 
+export async function listReportJobs() {
+  if (useMock) {
+    await new Promise((r) => setTimeout(r, 300));
+    return [mockJob("location-assets", "xlsx")];
+  }
+  return unwrap(api.get("/api/v1/reports/jobs")) as Promise<ReportJob[]>;
+}
+
 export async function createReportJob(body: {
   report_type: string;
   export_format?: "json" | "pdf" | "xlsx";

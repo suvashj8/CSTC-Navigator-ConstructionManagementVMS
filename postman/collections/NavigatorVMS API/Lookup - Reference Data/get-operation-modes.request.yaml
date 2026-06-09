@@ -1,0 +1,13 @@
+$kind: http-request
+name: Get Operation Modes
+method: GET
+url: '{{baseUrl}}/api/v1/operation-modes'
+order: 5000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

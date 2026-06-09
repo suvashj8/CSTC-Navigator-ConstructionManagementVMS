@@ -1,0 +1,31 @@
+$kind: http-request
+name: Create Driver
+method: POST
+url: '{{baseUrl}}/api/v1/drivers'
+order: 2000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Test Driver",
+      "email": "test.driver@demo.local",
+      "license_no": "DL-TEST-001",
+      "contact_phone": "0700000000",
+      "issue_date": "2020-01-01",
+      "expiry_date": "2030-12-31"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const d = pm.response.json(); if(d.data?.id) pm.environment.set("driverId", d.data.id);

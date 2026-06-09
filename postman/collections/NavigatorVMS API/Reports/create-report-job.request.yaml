@@ -1,0 +1,27 @@
+$kind: http-request
+name: Create Report Job
+method: POST
+url: '{{baseUrl}}/api/v1/reports/jobs'
+order: 1000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "report_type": "location-assets",
+      "export_format": "xlsx"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const d = pm.response.json(); if(d.data?.id) pm.environment.set("reportJobId", d.data.id);

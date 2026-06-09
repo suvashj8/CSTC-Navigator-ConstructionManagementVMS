@@ -1,0 +1,24 @@
+$kind: http-request
+name: Create Insurance
+method: POST
+url: '{{baseUrl}}/api/v1/insurance'
+order: 2000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "asset_id": "{{assetId}}",
+      "policy_number": "POL-TEST-001",
+      "start_date": "2025-01-01",
+      "end_date": "2026-01-01"
+    }

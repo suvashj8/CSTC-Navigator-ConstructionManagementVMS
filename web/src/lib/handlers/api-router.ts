@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -8,6 +9,7 @@ import {
   internal,
   notFound,
   ok,
+  serviceUnavailable,
   unauthorized,
 } from "../api-response";
 import { signImpersonation, signPlatform, signTenant } from "../auth";
@@ -135,7 +137,9 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
       } else if (method === "DELETE" && matchPath(segments, ["assets", ":id"])) {
         const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
         if (roleErr) return withCors(roleErr, req);
-        res = await decommissionAsset(pool, extractParams(["assets", ":id"], segments).id);
+        const assetId = extractParams(["assets", ":id"], segments).id;
+        const permanent = req.nextUrl.searchParams.get("permanent") === "true";
+        res = permanent ? await permanentlyDeleteAsset(pool, assetId) : await decommissionAsset(pool, assetId);
       } else if (method === "GET" && segments[0] === "allocations" && segments.length === 1) {
         res = await listAllocations(req, pool, p);
       } else if (method === "POST" && segments[0] === "allocations" && segments.length === 1) {
@@ -161,6 +165,48 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
         const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
         if (roleErr) return withCors(roleErr, req);
         res = await createOperationMode(req, pool);
+      } else if (method === "GET" && segments[0] === "asset-types" && segments.length === 1) {
+        res = await listAssetTypes(pool);
+      } else if (method === "POST" && segments[0] === "asset-types" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createAssetType(req, pool);
+      } else if (method === "GET" && segments[0] === "ownership-types" && segments.length === 1) {
+        res = await listOwnershipTypes(pool);
+      } else if (method === "POST" && segments[0] === "ownership-types" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createOwnershipType(req, pool);
+      } else if (method === "GET" && segments[0] === "maintenance-statuses" && segments.length === 1) {
+        res = await listMaintenanceStatuses(pool);
+      } else if (method === "POST" && segments[0] === "maintenance-statuses" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createMaintenanceStatus(req, pool);
+      } else if (method === "GET" && segments[0] === "supplier-categories" && segments.length === 1) {
+        res = await listSupplierCategories(pool);
+      } else if (method === "POST" && segments[0] === "supplier-categories" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createSupplierCategory(req, pool);
+      } else if (method === "GET" && segments[0] === "location-types" && segments.length === 1) {
+        res = await listLocationTypes(pool);
+      } else if (method === "POST" && segments[0] === "location-types" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createLocationType(req, pool);
+      } else if (method === "GET" && segments[0] === "insurance-statuses" && segments.length === 1) {
+        res = await listInsuranceStatuses(pool);
+      } else if (method === "POST" && segments[0] === "insurance-statuses" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createInsuranceStatus(req, pool);
+      } else if (method === "GET" && segments[0] === "insurance-coverage-types" && segments.length === 1) {
+        res = await listInsuranceCoverageTypes(pool);
+      } else if (method === "POST" && segments[0] === "insurance-coverage-types" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createInsuranceCoverageType(req, pool);
       } else if (method === "GET" && segments[0] === "locations" && segments.length === 1) {
         res = await listLocations(pool);
       } else if (method === "POST" && segments[0] === "locations" && segments.length === 1) {
@@ -245,6 +291,10 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
         res = await listNotifications(pool, claims.sub);
       } else if (method === "PUT" && matchPath(segments, ["notifications", ":id", "read"])) {
         res = await markNotificationRead(pool, extractParams(["notifications", ":id", "read"], segments).id);
+      } else if (method === "POST" && segments.join("/") === "notifications/mark-read") {
+        res = await markNotificationsReadBulk(req, pool, claims.sub);
+      } else if (method === "GET" && segments.join("/") === "reports/jobs") {
+        res = await listReportJobs(pool, claims.sub);
       } else if (method === "POST" && segments.join("/") === "reports/jobs") {
         res = await createReportJob(req, pool, tenantId, claims.sub);
       } else if (method === "GET" && matchPath(segments, ["reports", "jobs", ":id"])) {
@@ -264,29 +314,62 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
 
 // --- Auth handlers ---
 
+type TenantUserRow = {
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  password_hash: string;
+  location_ids: string[] | null;
+};
+
+async function lookupActiveTenantUser(pool: import("pg").Pool, email: string): Promise<TenantUserRow | null> {
+  const res = await pool.query(
+    `SELECT user_id, name, email, role::text, password_hash, location_ids
+     FROM users WHERE email = $1 AND status = 'active'`,
+    [email.toLowerCase()]
+  );
+  return (res.rows[0] as TenantUserRow | undefined) ?? null;
+}
+
+async function verifyTenantPassword(row: TenantUserRow | null, password: string): Promise<boolean> {
+  if (!row?.password_hash) return false;
+  return bcrypt.compare(password, row.password_hash);
+}
+
 async function tenantLogin(req: NextRequest) {
   const sub = req.headers.get("x-tenant-subdomain");
   if (!sub) return badRequest("X-Tenant-Subdomain header is required");
   const body = await req.json().catch(() => null);
   if (!body?.email || !body?.password) return badRequest("invalid body");
 
+  const subdomain = sub.toLowerCase();
+  const email = String(body.email).toLowerCase();
+  const password = String(body.password);
+  const isDemo = subdomain === "demo";
+
   const tm = getTenantManager();
   try {
-    const { ensureDemoSeeded } = await import("../ensure-demo");
-    if (sub.toLowerCase() === "demo") {
+    const { ensureDemoSeeded, repairDemoSeeded } = await import("../ensure-demo");
+    if (isDemo) {
       await ensureDemoSeeded(tm);
     }
-    const info = await tm.bySubdomain(sub.toLowerCase());
+    const info = await tm.bySubdomain(subdomain);
     const pool = await tm.pool(info.id);
-    const res = await pool.query(
-      `SELECT user_id, name, email, role::text, password_hash, location_ids
-       FROM users WHERE email = $1 AND status = 'active'`,
-      [String(body.email).toLowerCase()]
-    );
-    const row = res.rows[0];
-    if (!row || !(await bcrypt.compare(body.password, row.password_hash))) {
+
+    let row = await lookupActiveTenantUser(pool, email);
+    let passwordOk = await verifyTenantPassword(row, password);
+
+    if (!passwordOk && isDemo) {
+      await repairDemoSeeded(tm);
+      row = await lookupActiveTenantUser(pool, email);
+      passwordOk = await verifyTenantPassword(row, password);
+    }
+
+    if (!passwordOk || !row) {
       return unauthorized("invalid tenant or credentials");
     }
+
     const locIds = (row.location_ids as string[] | null)?.map(String) ?? [];
     const login = await signTenant(row.user_id, row.email, row.name, row.role, info.id, info.name, locIds);
     return ok(login);
@@ -295,26 +378,69 @@ async function tenantLogin(req: NextRequest) {
       console.error("[tenantLogin]", e);
     }
     const msg = (e as Error).message ?? "";
-    if (msg.includes("ECONNREFUSED") || msg.includes("connect")) {
-      return unauthorized("database not reachable — run npm run docker:infra then npm run seed");
+    if (isInfrastructureError(msg)) {
+      return serviceUnavailable("database not reachable â€” start Docker, then run npm run dev:full:host from project root");
+    }
+    if (isDemo && msg) {
+      return serviceUnavailable(`demo setup failed â€” run npm run seed (${msg})`);
     }
     return unauthorized("invalid tenant or credentials");
   }
 }
 
+function isInfrastructureError(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    msg.includes("ECONNREFUSED") ||
+    msg.includes("ENOTFOUND") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("ETIMEDOUT") ||
+    lower.includes("connect") ||
+    lower.includes("timeout") ||
+    lower.includes("password authentication") ||
+    msg.includes("28P01") ||
+    lower.includes("database") ||
+    lower.includes("does not exist") ||
+    lower.includes("getaddrinfo")
+  );
+}
+
 async function platformLogin(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body?.email || !body?.password) return badRequest("invalid body");
+  const email = String(body.email).toLowerCase();
+  const password = String(body.password);
   const tm = getTenantManager();
-  const res = await tm.main().query(`SELECT user_id, name, password_hash FROM super_users WHERE email = $1`, [
-    String(body.email).toLowerCase(),
-  ]);
-  const row = res.rows[0];
-  if (!row || !(await bcrypt.compare(body.password, row.password_hash))) {
+  try {
+    const { ensurePlatformSeeded, repairPlatformSeeded } = await import("../ensure-demo");
+    await ensurePlatformSeeded(tm);
+
+    let res = await tm.main().query(`SELECT user_id, name, password_hash FROM super_users WHERE email = $1`, [email]);
+    let row = res.rows[0];
+    let passwordOk = row && (await bcrypt.compare(password, row.password_hash));
+
+    if (!passwordOk) {
+      await repairPlatformSeeded(tm);
+      res = await tm.main().query(`SELECT user_id, name, password_hash FROM super_users WHERE email = $1`, [email]);
+      row = res.rows[0];
+      passwordOk = row && (await bcrypt.compare(password, row.password_hash));
+    }
+
+    if (!passwordOk || !row) {
+      return unauthorized("invalid credentials");
+    }
+    const login = await signPlatform(row.user_id, email, row.name);
+    return ok(login);
+  } catch (e) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[platformLogin]", e);
+    }
+    const msg = (e as Error).message ?? "";
+    if (isInfrastructureError(msg)) {
+      return serviceUnavailable("database not reachable â€” start Docker, then run npm run dev:full:host from project root");
+    }
     return unauthorized("invalid credentials");
   }
-  const login = await signPlatform(row.user_id, body.email, row.name);
-  return ok(login);
 }
 
 // --- Platform handlers ---
@@ -423,7 +549,7 @@ async function listAssets(req: NextRequest, pool: import("pg").Pool, p: ReturnTy
     where += ` AND a.asset_type = $${args.length}`;
   }
   if (operationMode === "hour") {
-    where += " AND (a.operation_mode = 'hour' OR a.vehicle_category = 'Dozer' OR a.asset_type IN ('equipment', 'tool'))";
+    where += " AND (a.operation_mode = 'hour' OR a.vehicle_category = 'Dozer' OR a.asset_type <> 'vehicle')";
   } else if (operationMode === "km") {
     where += " AND a.asset_type = 'vehicle' AND NOT (a.operation_mode = 'hour' OR a.vehicle_category = 'Dozer')";
   }
@@ -492,8 +618,33 @@ async function updateAsset(req: NextRequest, pool: import("pg").Pool, id: string
 }
 
 async function decommissionAsset(pool: import("pg").Pool, id: string) {
-  await pool.query(`UPDATE assets SET status = 'decommissioned' WHERE asset_id = $1`, [id]);
+  const res = await pool.query(
+    `UPDATE assets SET status = 'decommissioned' WHERE asset_id = $1 RETURNING asset_id`,
+    [id]
+  );
+  if (!res.rowCount) return notFound("asset not found");
   return ok({ ok: true });
+}
+
+async function permanentlyDeleteAsset(pool: import("pg").Pool, id: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM allocations WHERE asset_id = $1`, [id]);
+    await client.query(`DELETE FROM insurance_policies WHERE asset_id = $1`, [id]);
+    const res = await client.query(`DELETE FROM assets WHERE asset_id = $1 RETURNING asset_id`, [id]);
+    if (!res.rowCount) {
+      await client.query("ROLLBACK");
+      return notFound("asset not found");
+    }
+    await client.query("COMMIT");
+    return ok({ ok: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 async function listAllocations(req: NextRequest, pool: import("pg").Pool, p: ReturnType<typeof pageParams>) {
@@ -504,10 +655,12 @@ async function listAllocations(req: NextRequest, pool: import("pg").Pool, p: Ret
     args.push(state);
     where = ` WHERE al.state = $${args.length}`;
   }
-  const from = ` FROM allocations al JOIN assets a ON a.asset_id = al.asset_id JOIN work_locations fl ON fl.location_id = al.from_location_id JOIN work_locations tl ON tl.location_id = al.to_location_id JOIN users d ON d.user_id = al.driver_id`;
-  const dataSQL = `SELECT al.alloc_id, al.asset_id, a.reg_serial_no || ' — ' || a.make || ' ' || a.model AS asset_label,
+  const from = ` FROM allocations al JOIN assets a ON a.asset_id = al.asset_id JOIN work_locations fl ON fl.location_id = al.from_location_id JOIN work_locations tl ON tl.location_id = al.to_location_id LEFT JOIN users d ON d.user_id = al.driver_id LEFT JOIN users recv ON recv.user_id = al.receiver_user_id`;
+  const dataSQL = `SELECT al.alloc_id, al.group_id, al.asset_id, a.reg_serial_no || ' â€” ' || a.make || ' ' || a.model AS asset_label,
     al.from_location_id, fl.name AS from_location_name, al.to_location_id, tl.name AS to_location_name,
-    al.driver_id, d.name AS driver_name, al.state, al.start_date, al.expected_return${from}${where} ORDER BY al.created_at DESC`;
+    al.driver_id, COALESCE(d.name, al.external_driver_name) AS driver_name,
+    al.receiver_user_id, al.receiver_role, COALESCE(recv.name, al.receiver_name) AS receiver_name,
+    al.state, al.start_date, al.expected_return${from}${where} ORDER BY al.created_at DESC`;
   const { list, total } = await paginatedQuery(pool, p, `SELECT COUNT(*)::bigint AS count${from}${where}`, args, dataSQL, args, scanAllocationRow);
   return ok(list, paginatedMeta(total, p));
 }
@@ -536,7 +689,35 @@ async function resolveAllocationLocationId(
 
 async function createAllocation(req: NextRequest, pool: import("pg").Pool) {
   const body = await req.json().catch(() => null);
-  if (!body?.asset_id || !body?.driver_id) return badRequest("asset and driver are required");
+  const assetIds: string[] = Array.isArray(body?.asset_ids)
+    ? body.asset_ids.filter((id: unknown) => typeof id === "string" && id.trim())
+    : body?.asset_id
+      ? [String(body.asset_id)]
+      : [];
+  if (assetIds.length === 0) return badRequest("at least one asset is required");
+
+  const receiverRole = (body?.receiver_role ?? "").trim().toLowerCase();
+  const receiverUserId = optionalUUID(body?.receiver_user_id);
+  const receiverName = (body?.receiver_name ?? "").trim();
+  const receiverContact = (body?.receiver_contact ?? "").trim();
+  if (!receiverRole) return badRequest("receiving authority role is required");
+  if (!["manager", "employee", "supervisor", "other"].includes(receiverRole)) {
+    return badRequest("invalid receiver role");
+  }
+  if (receiverRole === "other") {
+    if (!receiverName) return badRequest("receiver name is required for other");
+    if (!receiverContact) return badRequest("receiver contact is required for other");
+  } else if (!receiverUserId) {
+    return badRequest("select a receiving authority");
+  }
+
+  const driverId = optionalUUID(body?.driver_id);
+  const externalDriverName = (body?.external_driver_name ?? "").trim();
+  const externalDriverContact = (body?.external_driver_contact ?? "").trim();
+  if (!driverId && !externalDriverName && body?.driver_mode === "external") {
+    return badRequest("external driver name is required");
+  }
+
   let fromLocationId: string;
   let toLocationId: string;
   try {
@@ -545,14 +726,55 @@ async function createAllocation(req: NextRequest, pool: import("pg").Pool) {
   } catch (e) {
     return badRequest((e as Error).message);
   }
-  const res = await pool.query(
-    `INSERT INTO allocations (asset_id, from_location_id, to_location_id, driver_id, start_date, expected_return)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING alloc_id`,
-    [body.asset_id, fromLocationId, toLocationId, body.driver_id, body.start_date, body.expected_return]
-  );
-  const id = res.rows[0].alloc_id;
-  const alloc = await fetchAllocation(pool, id);
-  return created(alloc ?? { id, state: "pending" });
+
+  const groupId = randomUUID();
+  const createdIds: string[] = [];
+
+  for (const assetId of assetIds) {
+    const res = await pool.query(
+      `INSERT INTO allocations (
+         asset_id, from_location_id, to_location_id, driver_id,
+         external_driver_name, external_driver_contact,
+         receiver_user_id, receiver_role, receiver_name, receiver_contact,
+         group_id, start_date, expected_return
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING alloc_id`,
+      [
+        assetId,
+        fromLocationId,
+        toLocationId,
+        driverId,
+        driverId ? null : externalDriverName || null,
+        driverId ? null : externalDriverContact || null,
+        receiverRole === "other" ? null : receiverUserId,
+        receiverRole,
+        receiverRole === "other" ? receiverName : null,
+        receiverRole === "other" ? receiverContact : null,
+        groupId,
+        body.start_date,
+        body.expected_return,
+      ]
+    );
+    createdIds.push(res.rows[0].alloc_id);
+  }
+
+  if (receiverUserId && receiverRole !== "other") {
+    const assetCount = assetIds.length;
+    const title = assetCount > 1 ? `Allocation: ${assetCount} assets incoming` : "Allocation: asset incoming";
+    const message = `You are listed as receiving authority for a transfer request. Review allocations when assets arrive.`;
+    await pool.query(
+      `INSERT INTO notifications (recipient_id, type, title, message, channel, status, sent_at)
+       VALUES ($1, 'allocation', $2, $3, 'in_app', 'sent', NOW())`,
+      [receiverUserId, title, message]
+    );
+  }
+
+  const alloc = await fetchAllocation(pool, createdIds[0]);
+  return created({
+    ...(alloc ?? { id: createdIds[0], state: "pending" }),
+    group_id: groupId,
+    created_count: createdIds.length,
+    created_ids: createdIds,
+  });
 }
 
 async function transitionAllocation(pool: import("pg").Pool, id: string, action: string) {
@@ -563,11 +785,41 @@ async function transitionAllocation(pool: import("pg").Pool, id: string, action:
     release: "released",
     cancel: "cancelled",
   };
+  const requiredState: Record<string, string> = {
+    approve: "pending",
+    cancel: "pending",
+    dispatch: "approved",
+    receive: "in_transit",
+    release: "active",
+  };
   const state = next[action];
-  if (!state) return badRequest("invalid action");
-  await pool.query(`UPDATE allocations SET state = $1 WHERE alloc_id = $2`, [state, id]);
+  const fromState = requiredState[action];
+  if (!state || !fromState) return badRequest("invalid action");
+
+  const cur = await pool.query(`SELECT group_id, state FROM allocations WHERE alloc_id = $1`, [id]);
+  const row = cur.rows[0];
+  if (!row) return notFound("allocation not found");
+  if (row.state !== fromState) return badRequest(`allocation is not ${fromState}`);
+
+  const groupId = row.group_id as string | null;
+  let affected = 0;
+  if (groupId) {
+    const res = await pool.query(
+      `UPDATE allocations SET state = $1 WHERE group_id = $2 AND state = $3 RETURNING alloc_id`,
+      [state, groupId, fromState]
+    );
+    affected = res.rowCount ?? 0;
+  } else {
+    const res = await pool.query(
+      `UPDATE allocations SET state = $1 WHERE alloc_id = $2 AND state = $3 RETURNING alloc_id`,
+      [state, id, fromState]
+    );
+    affected = res.rowCount ?? 0;
+  }
+  if (affected === 0) return badRequest("no allocations updated");
+
   const alloc = await fetchAllocation(pool, id);
-  return ok(alloc ?? { id, state });
+  return ok({ ...(alloc ?? { id, state }), affected_count: affected, group_id: groupId });
 }
 
 const BUILTIN_VEHICLE_CATEGORIES = [
@@ -600,7 +852,7 @@ async function createVehicleCategory(req: NextRequest, pool: import("pg").Pool) 
   const body = await req.json().catch(() => null);
   const name = (body?.name ?? "").trim();
   if (!name) return badRequest("name is required");
-  const modes = body?.operation_modes ?? "km";
+  const modes = body?.operation_modes ?? "both";
   if (!["km", "hour", "both"].includes(modes)) return badRequest("invalid operation_modes");
   const reserved = BUILTIN_VEHICLE_CATEGORIES.some(
     (c) => c.toLowerCase() === name.toLowerCase() && c !== "Other"
@@ -680,6 +932,273 @@ async function createVehicleDepartment(req: NextRequest, pool: import("pg").Pool
 
 const BUILTIN_OPERATION_MODE_LABELS = ["Route + KM", "Place + Hr / Min"];
 
+const BUILTIN_ASSET_TYPE_LABELS = ["Vehicle", "Equipment", "Tool"];
+
+async function listAssetTypes(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT type_id, name, description FROM asset_type_catalog ORDER BY name`
+  );
+  const list = res.rows.map((r) => ({
+    id: r.type_id,
+    name: r.name,
+    description: r.description ?? "",
+  }));
+  return ok(list);
+}
+
+async function createAssetType(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  const reserved = BUILTIN_ASSET_TYPE_LABELS.some(
+    (t) => t.toLowerCase() === name.toLowerCase() && t !== "Other"
+  );
+  if (reserved) return badRequest("name matches a built-in asset type");
+  try {
+    const ins = await pool.query(
+      `INSERT INTO asset_type_catalog (name, description) VALUES ($1, $2)
+       RETURNING type_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({
+      id: r.type_id,
+      name: r.name,
+      description: r.description ?? "",
+    });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_asset_type_catalog_name_lower")) {
+      return badRequest("asset type name already exists");
+    }
+    throw e;
+  }
+}
+
+const BUILTIN_OWNERSHIP_LABELS = ["Owned", "Leased", "Rented"];
+
+async function listOwnershipTypes(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT ownership_id, name, description FROM ownership_type_catalog ORDER BY name`
+  );
+  return ok(
+    res.rows.map((r) => ({
+      id: r.ownership_id,
+      name: r.name,
+      description: r.description ?? "",
+    }))
+  );
+}
+
+async function createOwnershipType(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  if (BUILTIN_OWNERSHIP_LABELS.some((l) => l.toLowerCase() === name.toLowerCase())) {
+    return badRequest("name matches a built-in ownership type");
+  }
+  try {
+    const ins = await pool.query(
+      `INSERT INTO ownership_type_catalog (name, description) VALUES ($1, $2)
+       RETURNING ownership_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({ id: r.ownership_id, name: r.name, description: r.description ?? "" });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_ownership_type_catalog_name_lower")) return badRequest("ownership type already exists");
+    throw e;
+  }
+}
+
+const BUILTIN_MAINTENANCE_STATUSES = ["Scheduled", "In progress", "Completed"];
+
+async function listMaintenanceStatuses(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT status_id, name, description FROM maintenance_status_catalog ORDER BY name`
+  );
+  return ok(
+    res.rows.map((r) => ({
+      id: r.status_id,
+      name: r.name,
+      description: r.description ?? "",
+    }))
+  );
+}
+
+async function createMaintenanceStatus(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  if (BUILTIN_MAINTENANCE_STATUSES.some((s) => s.toLowerCase() === name.toLowerCase())) {
+    return badRequest("name matches a built-in status");
+  }
+  try {
+    const ins = await pool.query(
+      `INSERT INTO maintenance_status_catalog (name, description) VALUES ($1, $2)
+       RETURNING status_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({ id: r.status_id, name: r.name, description: r.description ?? "" });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_maintenance_status_catalog_name_lower")) return badRequest("status name already exists");
+    throw e;
+  }
+}
+
+const BUILTIN_SUPPLIER_CATEGORY_LABELS = ["Repair shop", "Parts vendor", "Fuel depot", "Rental partner"];
+
+async function listSupplierCategories(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT category_id, name, description FROM supplier_category_catalog ORDER BY name`
+  );
+  return ok(
+    res.rows.map((r) => ({
+      id: r.category_id,
+      name: r.name,
+      description: r.description ?? "",
+    }))
+  );
+}
+
+const BUILTIN_LOCATION_TYPE_LABELS = ["Construction site", "Workshop", "Yard / depot", "Office"];
+
+async function listLocationTypes(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT type_id, name, description FROM location_type_catalog ORDER BY name`
+  );
+  return ok(
+    res.rows.map((r) => ({
+      id: r.type_id,
+      name: r.name,
+      description: r.description ?? "",
+    }))
+  );
+}
+
+async function createLocationType(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  if (BUILTIN_LOCATION_TYPE_LABELS.some((l) => l.toLowerCase() === name.toLowerCase())) {
+    return badRequest("name matches a built-in location type");
+  }
+  try {
+    const ins = await pool.query(
+      `INSERT INTO location_type_catalog (name, description) VALUES ($1, $2)
+       RETURNING type_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({ id: r.type_id, name: r.name, description: r.description ?? "" });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_location_type_catalog_name_lower")) return badRequest("location type already exists");
+    throw e;
+  }
+}
+
+const BUILTIN_INSURANCE_STATUS_KEYS = ["active", "expiring", "expired"];
+const BUILTIN_INSURANCE_STATUS_LABELS = ["Active", "Expiring", "Expired"];
+
+async function listInsuranceStatuses(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT status_id, name, description FROM insurance_status_catalog ORDER BY name`
+  );
+  return ok(
+    res.rows.map((r) => ({
+      id: r.status_id,
+      name: r.name,
+      description: r.description ?? "",
+    }))
+  );
+}
+
+async function createInsuranceStatus(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  if (BUILTIN_INSURANCE_STATUS_LABELS.some((l) => l.toLowerCase() === name.toLowerCase())) {
+    return badRequest("name matches a built-in status");
+  }
+  try {
+    const ins = await pool.query(
+      `INSERT INTO insurance_status_catalog (name, description) VALUES ($1, $2)
+       RETURNING status_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({ id: r.status_id, name: r.name, description: r.description ?? "" });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_insurance_status_catalog_name_lower")) return badRequest("status already exists");
+    throw e;
+  }
+}
+
+const BUILTIN_INSURANCE_COVERAGE_KEYS = ["comprehensive", "third_party", "fire_theft", "liability"];
+const BUILTIN_INSURANCE_COVERAGE_LABELS = ["Comprehensive", "Third party", "Fire & theft", "Liability"];
+
+async function listInsuranceCoverageTypes(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT coverage_id, name, description FROM insurance_coverage_catalog ORDER BY name`
+  );
+  return ok(
+    res.rows.map((r) => ({
+      id: r.coverage_id,
+      name: r.name,
+      description: r.description ?? "",
+    }))
+  );
+}
+
+async function createInsuranceCoverageType(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  if (BUILTIN_INSURANCE_COVERAGE_LABELS.some((l) => l.toLowerCase() === name.toLowerCase())) {
+    return badRequest("name matches a built-in coverage type");
+  }
+  try {
+    const ins = await pool.query(
+      `INSERT INTO insurance_coverage_catalog (name, description) VALUES ($1, $2)
+       RETURNING coverage_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({ id: r.coverage_id, name: r.name, description: r.description ?? "" });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_insurance_coverage_catalog_name_lower")) return badRequest("coverage type already exists");
+    throw e;
+  }
+}
+
+async function createSupplierCategory(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  if (BUILTIN_SUPPLIER_CATEGORY_LABELS.some((l) => l.toLowerCase() === name.toLowerCase())) {
+    return badRequest("name matches a built-in category");
+  }
+  try {
+    const ins = await pool.query(
+      `INSERT INTO supplier_category_catalog (name, description) VALUES ($1, $2)
+       RETURNING category_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({ id: r.category_id, name: r.name, description: r.description ?? "" });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_supplier_category_catalog_name_lower")) return badRequest("category name already exists");
+    throw e;
+  }
+}
+
 async function listOperationModes(pool: import("pg").Pool) {
   const res = await pool.query(
     `SELECT mode_id, name, description, tracking_type, field_labels
@@ -746,14 +1265,19 @@ async function listLocations(pool: import("pg").Pool) {
   return ok(list);
 }
 
+const BUILTIN_LOCATION_TYPE_KEYS = ["construction", "workshop", "yard", "office"];
+
 async function createLocation(req: NextRequest, pool: import("pg").Pool) {
   const body = await req.json().catch(() => null);
   if (!body?.name) return badRequest("name is required");
   const mid = optionalUUID(body.manager_id);
-  const isCustom = body.is_custom === true || body.type === "other";
+  const typeKey = (body.type || "construction").trim();
+  const isCustom =
+    body.is_custom === true ||
+    (typeKey && !BUILTIN_LOCATION_TYPE_KEYS.includes(typeKey.toLowerCase()));
   const res = await pool.query(
     `INSERT INTO work_locations (name, type, address, manager_id, is_custom) VALUES ($1,$2,$3,$4,$5) RETURNING location_id`,
-    [body.name, body.type || "construction", body.address ?? "", mid, isCustom]
+    [body.name, typeKey || "construction", body.address ?? "", mid, isCustom]
   );
   const loc = await fetchLocation(pool, res.rows[0].location_id);
   return created(loc);
@@ -831,18 +1355,61 @@ async function listDrivers(req: NextRequest, pool: import("pg").Pool, p: ReturnT
   }
   const from = ` FROM driver_profiles d JOIN users u ON u.user_id = d.user_id`;
   const dataSQL = `SELECT d.driver_id, d.user_id, u.name, u.email, d.license_no, d.license_class, d.issue_date, d.expiry_date,
+    d.contact_phone, d.endorsements,
     CASE WHEN d.expiry_date < CURRENT_DATE THEN 'expired' WHEN d.expiry_date <= CURRENT_DATE + 60 THEN 'expiring' ELSE 'valid' END AS status${from}${where} ORDER BY d.expiry_date`;
   const { list, total } = await paginatedQuery(pool, p, `SELECT COUNT(*)::bigint AS count${from}${where}`, args, dataSQL, args, (r) => ({
     id: r.driver_id, user_id: r.user_id, name: r.name, email: r.email,
     license_no: r.license_no, license_class: r.license_class,
     issue_date: datePtr(r.issue_date), expiry_date: datePtr(r.expiry_date), status: r.status,
+    contact_phone: r.contact_phone ?? "", endorsements: r.endorsements ?? "",
   }));
   return ok(list, paginatedMeta(total, p));
 }
 
+function defaultDriverLicenseDates(body: Record<string, unknown>) {
+  const today = new Date();
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const issue = body.issue_date ?? fmt(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()));
+  const expiry = body.expiry_date ?? fmt(new Date(today.getFullYear() + 5, today.getMonth(), today.getDate()));
+  return { issue_date: issue, expiry_date: expiry };
+}
+
 async function createDriver(req: NextRequest, pool: import("pg").Pool) {
   const body = await req.json().catch(() => null);
+  // Support two modes:
+  // 1. New: body has user_id (links an existing user to a driver profile)
+  // 2. Legacy: body has name + email (creates a new user + driver profile)
+  if (body?.user_id) {
+    if (!body.license_no) return badRequest("license_no is required");
+    const dates = defaultDriverLicenseDates(body);
+    const client2 = await pool.connect();
+    try {
+      await client2.query("BEGIN");
+      const dRes2 = await client2.query(
+        `INSERT INTO driver_profiles (user_id, license_no, license_class, issue_date, expiry_date, endorsements, contact_phone)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING driver_id`,
+        [
+          body.user_id,
+          body.license_no,
+          body.license_class || "B",
+          dates.issue_date,
+          dates.expiry_date,
+          body.endorsements ?? "",
+          (body.contact_phone ?? "").trim(),
+        ]
+      );
+      await client2.query("COMMIT");
+      const driver2 = await fetchDriver(pool, dRes2.rows[0].driver_id);
+      return created(driver2);
+    } catch (e) {
+      await client2.query("ROLLBACK");
+      throw e;
+    } finally {
+      client2.release();
+    }
+  }
   if (!body?.name || !body?.email || !body?.license_no) return badRequest("name, email, and license_no are required");
+  const dates = defaultDriverLicenseDates(body);
   const password = body.password || "driver123";
   const hash = await bcrypt.hash(password, 10);
   const locId = optionalUUID(body.location_id);
@@ -855,9 +1422,17 @@ async function createDriver(req: NextRequest, pool: import("pg").Pool) {
     );
     const uid = uRes.rows[0].user_id;
     const dRes = await client.query(
-      `INSERT INTO driver_profiles (user_id, license_no, license_class, issue_date, expiry_date, endorsements)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING driver_id`,
-      [uid, body.license_no, body.license_class || "B", body.issue_date, body.expiry_date, body.endorsements ?? ""]
+      `INSERT INTO driver_profiles (user_id, license_no, license_class, issue_date, expiry_date, endorsements, contact_phone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING driver_id`,
+      [
+        uid,
+        body.license_no,
+        body.license_class || "B",
+        dates.issue_date,
+        dates.expiry_date,
+        body.endorsements ?? "",
+        (body.contact_phone ?? body.contact ?? "").trim(),
+      ]
     );
     await client.query("COMMIT");
     const driver = await fetchDriver(pool, dRes.rows[0].driver_id);
@@ -1092,6 +1667,23 @@ async function markNotificationRead(pool: import("pg").Pool, id: string) {
   await pool.query(`UPDATE notifications SET read_at = NOW() WHERE notif_id = $1`, [id]);
   return ok({ ok: true });
 }
+async function markNotificationsReadBulk(req: NextRequest, pool: import("pg").Pool, userId: string) {
+  const body = await req.json().catch(() => null);
+  const ids: string[] = Array.isArray(body?.ids) ? body.ids : [];
+  if (ids.length === 0) {
+    // Mark ALL unread notifications for this user as read
+    await pool.query(
+      `UPDATE notifications SET read_at = NOW() WHERE recipient_id = $1 AND read_at IS NULL`,
+      [userId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE notifications SET read_at = NOW() WHERE notif_id = ANY($1::uuid[]) AND recipient_id = $2`,
+      [ids, userId]
+    );
+  }
+  return ok({ ok: true });
+}
 
 async function createReportJob(req: NextRequest, pool: import("pg").Pool, tenantId: string, userId: string) {
   const body = await req.json().catch(() => null);
@@ -1136,6 +1728,28 @@ async function runReportSync(pool: import("pg").Pool, jobId: string, reportType:
   } catch (e) {
     await pool.query(`UPDATE report_jobs SET status = 'failed', error_message = $2 WHERE job_id = $1`, [jobId, (e as Error).message]);
   }
+}
+
+async function listReportJobs(pool: import("pg").Pool, userId: string) {
+  const res = await pool.query(
+    `SELECT job_id, report_type, export_format, status, file_name, error_message, created_at, completed_at
+     FROM report_jobs WHERE requested_by = $1 ORDER BY created_at DESC LIMIT 50`,
+    [userId]
+  );
+  const jobs = res.rows.map((r) => ({
+    id: r.job_id,
+    report_type: r.report_type,
+    export_format: r.export_format,
+    status: r.status,
+    file_name: r.file_name ?? null,
+    error_message: r.error_message ?? null,
+    created_at: r.created_at,
+    completed_at: r.completed_at ?? null,
+    download_url: (r.export_format !== "json" && r.status === "completed" && r.file_name)
+      ? `/api/v1/reports/jobs/${r.job_id}/download`
+      : null,
+  }));
+  return ok(jobs);
 }
 
 async function getReportJob(pool: import("pg").Pool, id: string) {

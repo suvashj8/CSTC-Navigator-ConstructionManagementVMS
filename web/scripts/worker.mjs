@@ -13,16 +13,32 @@ function dbConfig() {
   };
 }
 
-async function getMainPool() {
+/** Match tenant-manager: host dev uses 15432; containers use postgres:5432. */
+function resolveTenantDbEndpoint(storedHost, storedPort) {
+  const cfg = dbConfig();
+  const cfgPort = Number(cfg.port);
+  let host = (storedHost ?? "").trim() || cfg.host;
+  if (host === "postgres" && cfg.host !== "postgres") {
+    host = cfg.host;
+  }
+  if (cfg.host === "postgres" && (host === "localhost" || host === "127.0.0.1")) {
+    host = "postgres";
+  }
+  const onHostMachine = cfg.host !== "postgres";
+  const port = onHostMachine ? cfgPort : Number(storedPort) || cfgPort;
+  return { host, port };
+}
+
+function getMainPool() {
   return new Pool({ ...dbConfig(), max: 5 });
 }
 
-async function listActiveTenants(main: pg.Pool) {
+async function listActiveTenants(main) {
   const res = await main.query(`SELECT tenant_id FROM tenants WHERE status = 'active' ORDER BY created_at`);
   return res.rows.map((r) => r.tenant_id);
 }
 
-async function tenantPool(main: pg.Pool, tenantId: string) {
+async function tenantPool(main, tenantId) {
   const res = await main.query(
     `SELECT c.host, c.port, c.database_name, c.username, c.password_encrypted
      FROM tenant_db_connections c WHERE c.tenant_id = $1`,
@@ -30,9 +46,10 @@ async function tenantPool(main: pg.Pool, tenantId: string) {
   );
   const row = res.rows[0];
   if (!row) throw new Error("tenant connection missing");
+  const { host, port } = resolveTenantDbEndpoint(row.host, row.port);
   return new Pool({
-    host: row.host,
-    port: row.port,
+    host,
+    port,
     user: row.username,
     password: row.password_encrypted,
     database: row.database_name,
@@ -96,7 +113,7 @@ async function scanTenant(pool) {
 
 async function runScan() {
   console.log("[worker] expiry scan started");
-  const main = await getMainPool();
+  const main = getMainPool();
   try {
     const tenants = await listActiveTenants(main);
     for (const tid of tenants) {
@@ -115,12 +132,16 @@ async function runScan() {
   console.log("[worker] expiry scan finished");
 }
 
+process.on("unhandledRejection", (e) => console.error("[worker] unhandled rejection:", e));
+process.on("uncaughtException", (e) => console.error("[worker] uncaught exception:", e));
+
 console.log("[worker] scheduling daily expiry scan at 06:00 UTC");
 cron.schedule("0 6 * * *", () => {
   runScan().catch((e) => console.error("[worker] scan error:", e));
 });
 
-// Run immediately if WORKER_RUN_ON_START=true
 if (process.env.WORKER_RUN_ON_START === "true") {
   runScan().catch((e) => console.error("[worker] initial scan error:", e));
 }
+
+console.log("[worker] ready");

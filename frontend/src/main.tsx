@@ -17,9 +17,8 @@ const qc = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: !isNative,
-      // Keep list data warm briefly so page switches feel instant.
-      staleTime: 60_000,
+      refetchOnWindowFocus: import.meta.env.PROD && !isNative,
+      staleTime: 120_000,
       gcTime: 5 * 60_000,
     },
   },

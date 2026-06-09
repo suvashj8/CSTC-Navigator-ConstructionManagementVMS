@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
 import { toast } from "sonner";
 import { createInsurance, listInsurance, updateInsurance } from "@/api/insurance";
-import { listAssets } from "@/api/assets";
+import { AssetSelect } from "@/components/operations/asset-select";
 import { PageShell } from "@/components/layout/page-shell";
 import { MobileCard, MobileCardList } from "@/components/layout/mobile-card";
 import { ResponsiveTable } from "@/components/layout/responsive-table";
@@ -21,32 +21,24 @@ import { DIALOG_FORM_FIELD, DIALOG_FORM_FULL, DialogForm } from "@/components/ui
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CoverageType, InsurancePolicy } from "@/types/domain";
-
-const COVERAGE_TYPES: { value: CoverageType; label: string }[] = [
-  { value: "comprehensive", label: "Comprehensive" },
-  { value: "third_party", label: "Third party" },
-  { value: "fire_theft", label: "Fire & theft" },
-  { value: "liability", label: "Liability" },
-];
-
-const POLICY_STATUSES: { value: InsurancePolicy["status"]; label: string }[] = [
-  { value: "active", label: "Active" },
-  { value: "expiring", label: "Expiring" },
-  { value: "expired", label: "Expired" },
-];
+import { InsuranceCoveragePicker } from "@/components/insurance/InsuranceCoveragePicker";
+import { InsuranceStatusPicker } from "@/components/insurance/InsuranceStatusPicker";
+import { useInsuranceCoverageTypes } from "@/hooks/useInsuranceCoverageTypes";
+import { useInsuranceStatuses } from "@/hooks/useInsuranceStatuses";
+import { insuranceCoverageDisplayLabel } from "@/lib/insuranceCoverageCatalog";
+import { insuranceStatusDisplayLabel } from "@/lib/insuranceStatusCatalog";
+import type { InsurancePolicy } from "@/types/domain";
 
 type InsuranceForm = {
   asset_id: string;
   policy_no: string;
   insurer_name: string;
-  coverage_type: CoverageType;
+  coverage_type: string;
   insured_value: string;
   premium_amount: string;
   start_date: string;
   expiry_date: string;
-  status: InsurancePolicy["status"];
+  status: string;
 };
 
 const emptyForm = (): InsuranceForm => ({
@@ -92,14 +84,8 @@ export default function InsurancePage() {
     queryKey: ["insurance", page],
     queryFn: () => listInsurance({ page, per_page: DEFAULT_PER_PAGE }),
   });
-  const { data: assetsData } = useQuery({
-    queryKey: ["assets", "insurance-pick"],
-    queryFn: () => listAssets({ per_page: 30, status: "active" }),
-    enabled: modal !== null,
-    staleTime: 120_000,
-  });
-  const assets = assetsData?.rows ?? [];
-
+  const { catalog: statusCatalog } = useInsuranceStatuses();
+  const { catalog: coverageCatalog } = useInsuranceCoverageTypes();
   const closeModal = () => {
     setModal(null);
     setEditing(null);
@@ -232,7 +218,7 @@ export default function InsurancePage() {
                         label: "Status",
                         value: (
                           <Badge variant="outline" className={statusBadgeClass(p.status)}>
-                            {p.status}
+                            {insuranceStatusDisplayLabel(p.status, statusCatalog)}
                           </Badge>
                         ),
                       },
@@ -279,12 +265,12 @@ export default function InsurancePage() {
                       <TableCell>{p.asset_label}</TableCell>
                       <TableCell className="font-mono text-sm">{p.policy_no}</TableCell>
                       <TableCell>{p.insurer_name}</TableCell>
-                      <TableCell className="capitalize">{p.coverage_type.replace(/_/g, " ")}</TableCell>
+                      <TableCell>{insuranceCoverageDisplayLabel(p.coverage_type, coverageCatalog)}</TableCell>
                       <TableCell>{p.insured_value.toLocaleString()}</TableCell>
                       <TableCell>{formatNepalDate(p.expiry_date)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusBadgeClass(p.status)}>
-                          {p.status}
+                          {insuranceStatusDisplayLabel(p.status, statusCatalog)}
                         </Badge>
                       </TableCell>
                       <TableCell>{editButton(p)}</TableCell>
@@ -309,29 +295,20 @@ export default function InsurancePage() {
             </DialogDescription>
           </DialogHeader>
           <DialogForm onSubmit={handleSubmit}>
-            <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
-              <Label>Asset</Label>
-              {modal === "edit" ? (
+            {modal === "edit" ? (
+              <div className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}>
+                <Label>Asset</Label>
                 <Input value={editing?.asset_label ?? editing?.asset_id ?? ""} disabled />
-              ) : (
-                <Select value={form.asset_id || undefined} onValueChange={(v) => setField("asset_id", v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select vehicle or equipment" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assets.length === 0 ? (
-                      <SelectEmpty message="No active assets" />
-                    ) : (
-                      assets.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.reg_serial_no} — {a.make} {a.model}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+              </div>
+            ) : (
+              <AssetSelect
+                className={cn(DIALOG_FORM_FIELD, DIALOG_FORM_FULL)}
+                label="Asset"
+                value={form.asset_id}
+                onChange={(id) => setField("asset_id", id)}
+                required
+              />
+            )}
             <div className={DIALOG_FORM_FIELD}>
               <Label>Policy number</Label>
               <Input
@@ -349,42 +326,18 @@ export default function InsurancePage() {
                 onChange={(e) => setField("insurer_name", e.target.value)}
               />
             </div>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Coverage type</Label>
-              <Select
-                value={form.coverage_type}
-                onValueChange={(v) => setField("coverage_type", v as CoverageType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {COVERAGE_TYPES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Status</Label>
-              <Select
-                value={form.status}
-                onValueChange={(v) => setField("status", v as InsurancePolicy["status"])}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {POLICY_STATUSES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <InsuranceCoveragePicker
+              className={DIALOG_FORM_FIELD}
+              value={form.coverage_type}
+              onChange={(v) => setField("coverage_type", v)}
+              hideHint
+            />
+            <InsuranceStatusPicker
+              className={DIALOG_FORM_FIELD}
+              value={form.status}
+              onChange={(v) => setField("status", v)}
+              hideHint
+            />
             <div className={DIALOG_FORM_FIELD}>
               <Label>Insured value (NPR)</Label>
               <Input

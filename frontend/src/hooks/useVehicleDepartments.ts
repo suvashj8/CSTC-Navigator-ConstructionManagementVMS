@@ -12,7 +12,8 @@ export function useVehicleDepartments(enabled = true) {
     queryKey: ["vehicle-departments"],
     queryFn: listVehicleDepartments,
     enabled,
-    staleTime: 60_000,
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
   });
 
   const catalog = useMemo(() => mergeVehicleDepartments(custom), [custom]);

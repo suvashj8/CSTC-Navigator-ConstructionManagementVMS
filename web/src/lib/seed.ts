@@ -3,6 +3,28 @@ import type { Pool } from "pg";
 import { DEMO_ACCOUNTS, DEMO_SUBDOMAIN, DEMO_SUPER_USER, type DemoAccount } from "./demo-accounts";
 import type { TenantManager } from "./tenant-manager";
 
+/** Reset demo role accounts to known passwords (idempotent; does not wipe assets). */
+export async function syncDemoAccounts(tm: TenantManager): Promise<boolean> {
+  await tm.initMain();
+  await tm.syncConnectionHosts();
+  let tenantId: string | null = null;
+  try {
+    const info = await tm.bySubdomain(DEMO_SUBDOMAIN);
+    tenantId = info.id;
+  } catch {
+    return false;
+  }
+  if (!tenantId) return false;
+  await ensureDemoUsers(tm, tenantId);
+  return true;
+}
+
+/** Ensure platform super-user password matches demo-accounts.ts. */
+export async function syncPlatformSuperUser(tm: TenantManager): Promise<void> {
+  await tm.initMain();
+  await seedSuperUser(tm);
+}
+
 export async function runSeed(tm: TenantManager): Promise<void> {
   await tm.initMain();
   await tm.syncConnectionHosts();

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { SUPPLIER_CATEGORY_LABELS } from "@/lib/supplier-categories";
+import { isBuiltinSupplierCategory, supplierCategoryLabel } from "@/lib/supplier-categories";
 import type { Supplier, SupplierCategory } from "@/types/domain";
 
 type SupplierSelectProps = {
@@ -19,7 +19,9 @@ type SupplierSelectProps = {
 
 function filterSuppliers(rows: Supplier[], categories: SupplierCategory[]) {
   const set = new Set(categories);
-  return rows.filter((s) => set.has(s.category));
+  return rows.filter(
+    (s) => set.has(s.category) || (!isBuiltinSupplierCategory(s.category) && set.has("other"))
+  );
 }
 
 export function SupplierSelect({
@@ -68,7 +70,7 @@ export function SupplierSelect({
             ) : (
               suppliers.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {`${s.name} (${SUPPLIER_CATEGORY_LABELS[s.category]})`}
+                  {`${s.name} (${supplierCategoryLabel(s.category)})`}
                 </SelectItem>
               ))
             )}

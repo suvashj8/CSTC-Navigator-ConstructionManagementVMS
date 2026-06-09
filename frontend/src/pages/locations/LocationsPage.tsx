@@ -18,14 +18,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectEmpty, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LocationTypePicker } from "@/components/locations/LocationTypePicker";
+import { useLocationTypes } from "@/hooks/useLocationTypes";
+import { locationTypeDisplayLabel } from "@/lib/locationTypeCatalog";
 import type { WorkLocation } from "@/types/domain";
-
-const LOCATION_TYPES = [
-  { value: "construction", label: "Construction site" },
-  { value: "workshop", label: "Workshop" },
-  { value: "yard", label: "Yard / depot" },
-  { value: "office", label: "Office" },
-] as const;
 
 type LocationForm = {
   name: string;
@@ -57,6 +53,7 @@ export default function LocationsPage() {
   const [form, setForm] = useState<LocationForm>(emptyForm());
 
   const { data = [], isLoading } = useQuery({ queryKey: ["locations"], queryFn: listLocations });
+  const { catalog: locationTypeCatalog } = useLocationTypes();
   const { data: usersData } = useQuery({
     queryKey: ["users", "managers"],
     queryFn: () => listUsers({ per_page: 50 }),
@@ -157,7 +154,7 @@ export default function LocationsPage() {
                   <MobileCard
                     key={l.id}
                     title={l.name}
-                    subtitle={l.type}
+                    subtitle={locationTypeDisplayLabel(l.type, locationTypeCatalog)}
                     fields={[
                       { label: "Manager", value: l.manager_name ?? "—" },
                       { label: "Address", value: l.address || "—" },
@@ -196,7 +193,7 @@ export default function LocationsPage() {
                     data.map((l) => (
                       <TableRow key={l.id}>
                         <TableCell className="font-medium">{l.name}</TableCell>
-                        <TableCell className="capitalize">{l.type.replace(/_/g, " ")}</TableCell>
+                        <TableCell>{locationTypeDisplayLabel(l.type, locationTypeCatalog)}</TableCell>
                         <TableCell>{l.manager_name ?? "—"}</TableCell>
                         <TableCell>{l.address || "—"}</TableCell>
                         <TableCell>
@@ -235,21 +232,12 @@ export default function LocationsPage() {
                 required
               />
             </div>
-            <div className={DIALOG_FORM_FIELD}>
-              <Label>Type</Label>
-              <Select value={form.type} onValueChange={(v) => setField("type", v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LOCATION_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <LocationTypePicker
+              className={DIALOG_FORM_FIELD}
+              value={form.type}
+              onChange={(v) => setField("type", v)}
+              hideHint
+            />
             <div className={DIALOG_FORM_FIELD}>
               <Label>Address</Label>
               <Input

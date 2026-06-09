@@ -35,6 +35,7 @@ export async function createDriver(body: {
   issue_date: string;
   expiry_date: string;
   endorsements?: string;
+  contact_phone?: string;
 }) {
   if (useMock) {
     await delay();
@@ -48,6 +49,7 @@ export async function createDriver(body: {
       issue_date: body.issue_date,
       expiry_date: body.expiry_date,
       endorsements: body.endorsements,
+      contact_phone: body.contact_phone,
       status: licenseStatus(body.expiry_date),
     };
     mockDrivers = [driver, ...mockDrivers];

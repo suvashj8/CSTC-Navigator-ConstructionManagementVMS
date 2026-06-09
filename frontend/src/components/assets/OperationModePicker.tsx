@@ -1,11 +1,9 @@
 import { useMemo, useState } from "react";
-import { SearchableAutocomplete } from "@/components/ui/searchable-autocomplete";
-import { Label } from "@/components/ui/label";
 import { AddOperationModeDialog } from "@/components/assets/AddOperationModeDialog";
+import { CatalogSelect } from "@/components/ui/catalog-select";
 import { useOperationModes } from "@/hooks/useOperationModes";
 import {
   OPERATION_MODE_OTHER,
-  filterOperationModeOptions,
   operationModeOptionsForCategory,
   resolveOperationFromPick,
   type OperationModeMeta,
@@ -23,6 +21,7 @@ type Props = {
   hideHint?: boolean;
   className?: string;
   required?: boolean;
+  operationCatalog?: OperationModeMeta[];
 };
 
 export function OperationModePicker({
@@ -31,12 +30,12 @@ export function OperationModePicker({
   categoryCatalog,
   onModeChange,
   label = "Mode",
-  showDropdownIcon = false,
   hideHint = false,
   className,
-  required,
+  operationCatalog: catalogProp,
 }: Props) {
-  const { catalog, findMode } = useOperationModes();
+  const hook = useOperationModes(catalogProp === undefined);
+  const catalog = catalogProp ?? hook.catalog;
   const [addOpen, setAddOpen] = useState(false);
 
   const options = useMemo(
@@ -49,48 +48,31 @@ export function OperationModePicker({
     onModeChange(pick, resolved.mode, resolved.label);
   };
 
+  const items = useMemo(
+    () =>
+      options
+        .filter((name) => name !== OPERATION_MODE_OTHER)
+        .map((name) => ({ key: name, name })),
+    [options]
+  );
+
   return (
     <>
-      <div className={className ?? "space-y-2"}>
-        <Label>{label}</Label>
-        <SearchableAutocomplete
-          showDropdownIcon={showDropdownIcon}
-          revealAllOnOpen
-          value={value}
-          onChange={(v) => {
-            if (!v.trim()) {
-              onModeChange("", "km", null);
-              return;
-            }
-            const exact = findMode(v.trim());
-            if (exact) applyPick(exact.name);
-            else onModeChange(v, "km", null);
-          }}
-          onPick={(name) => {
-            if (name === OPERATION_MODE_OTHER) {
-              onModeChange("", "km", null);
-              setAddOpen(true);
-              return;
-            }
-            applyPick(name);
-          }}
-          options={options}
-          placeholder=""
-          filterFn={filterOperationModeOptions}
-          required={required}
-        />
-        {!hideHint ? (
-          <p className="text-xs text-muted-foreground">
-            <strong>Route + KM</strong> or <strong>Place + Hr / Min</strong>, or choose <strong>Other</strong> for a
-            custom mode.
-          </p>
-        ) : (
-          <p className="text-[10px] leading-tight text-muted-foreground">
-            Route + KM · Place + Hr / Min · Other
-          </p>
-        )}
-      </div>
-
+      <CatalogSelect
+        className={className}
+        label={label}
+        value={value}
+        items={items}
+        otherLabel={OPERATION_MODE_OTHER}
+        onOther={() => setAddOpen(true)}
+        hideHint={hideHint}
+        hint={
+          hideHint
+            ? undefined
+            : "Route + KM, Place + Hr / Min, or Other for a custom mode."
+        }
+        onChange={applyPick}
+      />
       <AddOperationModeDialog
         open={addOpen}
         onOpenChange={setAddOpen}

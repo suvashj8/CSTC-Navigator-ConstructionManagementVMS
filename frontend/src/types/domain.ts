@@ -6,12 +6,17 @@ export type UserRole =
   | "employee"
   | "driver";
 
-export type AssetType = "vehicle" | "equipment" | "tool";
-export type AssetStatus = "active" | "in_repair" | "in_transit" | "decommissioned";
-export type OwnershipType = "owned" | "leased" | "rented";
+export type BuiltinAssetType = "vehicle" | "equipment" | "tool";
+/** Built-in keys or tenant-defined custom type name stored on assets. */
+export type AssetType = BuiltinAssetType | (string & {});
+export type AssetStatus = "available" | "active" | "in_repair" | "in_transit" | "decommissioned";
+export type BuiltinOwnershipType = "owned" | "leased" | "rented";
+export type OwnershipType = BuiltinOwnershipType | (string & {});
 export type AllocState = "pending" | "approved" | "in_transit" | "active" | "released" | "cancelled";
-export type CoverageType = "comprehensive" | "third_party" | "fire_theft" | "liability";
-export type SupplierCategory = "repair" | "parts" | "fuel" | "rental" | "other";
+export type BuiltinCoverageType = "comprehensive" | "third_party" | "fire_theft" | "liability";
+export type CoverageType = BuiltinCoverageType | (string & {});
+export type BuiltinSupplierCategory = "repair" | "parts" | "fuel" | "rental" | "other";
+export type SupplierCategory = BuiltinSupplierCategory | (string & {});
 
 export type AuthUser = {
   id: string;
@@ -67,16 +72,25 @@ export type Asset = {
   assigned_driver_name?: string | null;
 };
 
+export type AllocationReceiverRole = "manager" | "employee" | "supervisor" | "other";
+
 export type Allocation = {
   id: string;
+  group_id?: string | null;
   asset_id: string;
   asset_label?: string;
   from_location_id: string;
   from_location_name?: string;
   to_location_id: string;
   to_location_name?: string;
-  driver_id: string;
-  driver_name?: string;
+  driver_id?: string | null;
+  driver_name?: string | null;
+  external_driver_name?: string | null;
+  external_driver_contact?: string | null;
+  receiver_user_id?: string | null;
+  receiver_role?: AllocationReceiverRole | null;
+  receiver_name?: string | null;
+  receiver_contact?: string | null;
   approved_by?: string | null;
   state: AllocState;
   start_date: string;
@@ -104,6 +118,7 @@ export type DriverProfile = {
   issue_date: string;
   expiry_date: string;
   endorsements?: string;
+  contact_phone?: string;
   status: "valid" | "expiring" | "expired";
 };
 
@@ -118,7 +133,7 @@ export type InsurancePolicy = {
   premium_amount: number;
   start_date: string;
   expiry_date: string;
-  status: "active" | "expired" | "expiring";
+  status: "active" | "expired" | "expiring" | (string & {});
 };
 
 export type Supplier = {

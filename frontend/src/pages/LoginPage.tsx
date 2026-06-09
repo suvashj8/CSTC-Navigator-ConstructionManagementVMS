@@ -44,12 +44,19 @@ export default function LoginPage() {
       nav("/dashboard", { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign in failed";
-      toast.error(msg, {
-        description:
-          msg.includes("database") || msg.includes("reach API")
-            ? undefined
-            : "Use subdomain demo. From project root run: npm run dev:full:host",
-        duration: 8000,
+      const infra =
+        msg.includes("database") ||
+        msg.includes("reach API") ||
+        msg.includes("demo setup") ||
+        msg.includes("Docker") ||
+        msg.includes("dev:full:host");
+      toast.error(infra ? "Cannot connect to the API or database" : msg, {
+        description: infra
+          ? "Start Docker Desktop, then from project root run: npm run dev:full:host"
+          : msg.includes("invalid")
+            ? "Subdomain must be demo. Tap a role below to fill credentials, then try again."
+            : undefined,
+        duration: 10000,
       });
     } finally {
       setLoading(false);

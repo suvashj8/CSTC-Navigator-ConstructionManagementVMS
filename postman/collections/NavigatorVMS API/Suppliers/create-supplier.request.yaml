@@ -1,0 +1,22 @@
+$kind: http-request
+name: Create Supplier
+method: POST
+url: '{{baseUrl}}/api/v1/suppliers'
+order: 2000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Test Supplier",
+      "contact": "0700000001"
+    }

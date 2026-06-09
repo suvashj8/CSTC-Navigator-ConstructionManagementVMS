@@ -1,0 +1,21 @@
+$kind: http-request
+name: Update Location
+method: PUT
+url: '{{baseUrl}}/api/v1/locations/{{locationId}}'
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Test Location Updated"
+    }

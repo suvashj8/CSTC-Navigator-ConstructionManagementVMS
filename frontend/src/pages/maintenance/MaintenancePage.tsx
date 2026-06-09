@@ -18,11 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DEFAULT_PER_PAGE } from "@/lib/pagination";
-import type { MaintenanceJob, MaintenanceStatus } from "@/types/domain";
-
-const STATUSES: MaintenanceStatus[] = ["Scheduled", "In progress", "Completed"];
+import { MaintenanceStatusPicker } from "@/components/maintenance/MaintenanceStatusPicker";
+import { MAINTENANCE_STATUS_OTHER } from "@/lib/maintenanceStatusCatalog";
+import type { MaintenanceJob } from "@/types/domain";
 
 function statusVariant(status: string): "default" | "secondary" | "outline" {
   if (status === "Completed") return "default";
@@ -35,7 +34,7 @@ export default function MaintenancePage() {
   const [page, setPage] = useState(1);
   const [vehicleId, setVehicleId] = useState("");
   const [desc, setDesc] = useState("");
-  const [status, setStatus] = useState<MaintenanceStatus>("Scheduled");
+  const [status, setStatus] = useState("Scheduled");
   const [vendorId, setVendorId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [completedAt, setCompletedAt] = useState("");
@@ -95,7 +94,7 @@ export default function MaintenancePage() {
         </Button>
       }
     >
-      <PermissionGate minRole="manager">
+      <PermissionGate roles={["super_user", "admin", "manager"]}>
         <Card>
           <CardContent className="space-y-4 pt-6">
             <h2 className="text-sm font-semibold">Work orders</h2>
@@ -105,21 +104,7 @@ export default function MaintenancePage() {
                 <Label className="h-5 leading-none">Description</Label>
                 <Input className="h-10" placeholder="Oil change" value={desc} onChange={(e) => setDesc(e.target.value)} />
               </div>
-              <div className="flex flex-col gap-2">
-                <Label className="h-5 leading-none">Status</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as MaintenanceStatus)}>
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <MaintenanceStatusPicker value={status} onChange={setStatus} hideHint />
               <SupplierSelect
                 value={vendorId}
                 onChange={setVendorId}
@@ -164,7 +149,13 @@ export default function MaintenancePage() {
             </div>
             <Button
               className="w-full sm:w-auto"
-              disabled={!vehicleId || !desc.trim() || createMut.isPending}
+              disabled={
+                !vehicleId ||
+                !desc.trim() ||
+                !status ||
+                status === MAINTENANCE_STATUS_OTHER ||
+                createMut.isPending
+              }
               onClick={() =>
                 createMut.mutate({
                   asset_id: vehicleId,
@@ -201,40 +192,43 @@ export default function MaintenancePage() {
                     {rows.length === 0 ? (
                       <p className="py-8 text-center text-sm text-muted-foreground">No work orders</p>
                     ) : (
-                      rows.map((m: MaintenanceJob) => (
-                        <MobileCard key={m.id} title={m.description || "Work order"}>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge variant={statusVariant(m.status)}>{m.status}</Badge>
-                            {m.asset_label ? (
-                              <Badge variant="outline">{m.asset_label}</Badge>
-                            ) : null}
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                            <span className="text-muted-foreground">Scheduled</span>
-                            <span>{m.scheduled_at ?? "—"}</span>
-                            <span className="text-muted-foreground">Supplier</span>
-                            <span>
-                              <SupplierLink supplierId={m.supplier_id} supplierName={m.supplier_name} />
-                            </span>
-                            <span className="text-muted-foreground">ODO</span>
-                            <span>{m.odometer_at_service ?? "—"}</span>
-                            <span className="text-muted-foreground">Parts</span>
-                            <span>{m.parts_cost != null ? `NPR ${m.parts_cost}` : "—"}</span>
-                            <span className="text-muted-foreground">Labor</span>
-                            <span>{m.labor_cost != null ? `NPR ${m.labor_cost}` : "—"}</span>
-                          </div>
-                          <PermissionGate minRole="manager">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-3 w-full text-destructive"
-                              onClick={() => deleteMut.mutate(m.id)}
-                            >
-                              Delete
-                            </Button>
-                          </PermissionGate>
-                        </MobileCard>
-                      ))
+                      rows.map((m: MaintenanceJob) => {
+                        const totalCost = (m.parts_cost ?? 0) + (m.labor_cost ?? 0);
+                        return (
+                          <MobileCard
+                            key={m.id}
+                            title={m.description || "Work order"}
+                            subtitle={m.asset_label}
+                            fields={[
+                              { label: "Status", value: <Badge variant={statusVariant(m.status)}>{m.status}</Badge> },
+                              { label: "Scheduled", value: m.scheduled_at ?? "—" },
+                              {
+                                label: "Supplier",
+                                value: (
+                                  <SupplierLink supplierId={m.supplier_id} supplierName={m.supplier_name} />
+                                ),
+                              },
+                              { label: "ODO", value: m.odometer_at_service ?? "—" },
+                              {
+                                label: "Cost",
+                                value: totalCost > 0 ? `NPR ${totalCost}` : "—",
+                              },
+                            ]}
+                            actions={
+                              <PermissionGate roles={["super_user", "admin", "manager"]}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive"
+                                  onClick={() => deleteMut.mutate(m.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </PermissionGate>
+                            }
+                          />
+                        );
+                      })
                     )}
                   </MobileCardList>
                 }
@@ -281,7 +275,7 @@ export default function MaintenancePage() {
                                 {total != null && total > 0 ? `NPR ${total}` : "—"}
                               </TableCell>
                               <TableCell>
-                                <PermissionGate minRole="manager">
+                                <PermissionGate roles={["super_user", "admin", "manager"]}>
                                   <Button
                                     variant="ghost"
                                     size="icon"

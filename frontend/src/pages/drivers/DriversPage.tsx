@@ -35,6 +35,7 @@ type DriverForm = {
   issue_date: string;
   expiry_date: string;
   endorsements: string;
+  contact_phone: string;
 };
 
 const emptyForm = (): DriverForm => ({
@@ -47,6 +48,7 @@ const emptyForm = (): DriverForm => ({
   issue_date: "",
   expiry_date: "",
   endorsements: "",
+  contact_phone: "",
 });
 
 export default function DriversPage() {
@@ -101,6 +103,7 @@ export default function DriversPage() {
       issue_date: form.issue_date,
       expiry_date: form.expiry_date,
       endorsements: form.endorsements.trim() || undefined,
+      contact_phone: form.contact_phone.trim() || undefined,
     });
   };
 
@@ -159,6 +162,7 @@ export default function DriversPage() {
                     subtitle={d.license_no}
                     fields={[
                       { label: "Class", value: d.license_class },
+                      { label: "Contact", value: d.contact_phone || "—" },
                       { label: "Expiry", value: formatNepalDate(d.expiry_date) },
                       { label: "Status", value: <LicenseStatusBadge status={d.status} /> },
                     ]}
@@ -173,6 +177,7 @@ export default function DriversPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>License no.</TableHead>
+                    <TableHead>Contact</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead>Issue date</TableHead>
                     <TableHead>Expiry date</TableHead>
@@ -183,7 +188,7 @@ export default function DriversPage() {
                   {isLoading &&
                     Array.from({ length: 3 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 7 }).map((__, j) => (
+                        {Array.from({ length: 8 }).map((__, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
@@ -192,7 +197,7 @@ export default function DriversPage() {
                     ))}
                   {!isLoading && rows.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
                         No drivers found.
                       </TableCell>
                     </TableRow>
@@ -202,6 +207,7 @@ export default function DriversPage() {
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell>{d.email}</TableCell>
                       <TableCell className="font-mono text-sm">{d.license_no}</TableCell>
+                      <TableCell>{d.contact_phone || "—"}</TableCell>
                       <TableCell>{d.license_class}</TableCell>
                       <TableCell>{formatNepalDate(d.issue_date)}</TableCell>
                       <TableCell>{formatNepalDate(d.expiry_date)}</TableCell>
@@ -234,6 +240,15 @@ export default function DriversPage() {
             <div className={DIALOG_FORM_FIELD}>
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} required />
+            </div>
+            <div className={DIALOG_FORM_FIELD}>
+              <Label>Contact number</Label>
+              <Input
+                type="tel"
+                placeholder="e.g. 9801234567"
+                value={form.contact_phone}
+                onChange={(e) => setField("contact_phone", e.target.value)}
+              />
             </div>
             <div className={DIALOG_FORM_FIELD}>
               <Label>Password</Label>

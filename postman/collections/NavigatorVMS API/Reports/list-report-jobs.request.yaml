@@ -1,0 +1,13 @@
+$kind: http-request
+name: List Report Jobs
+method: GET
+url: '{{baseUrl}}/api/v1/reports/jobs'
+order: 500
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

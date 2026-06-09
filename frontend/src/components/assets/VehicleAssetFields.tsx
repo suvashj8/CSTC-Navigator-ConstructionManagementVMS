@@ -13,6 +13,8 @@ import {
   resolveOperationFromPick,
 } from "@/lib/operationModeCatalog";
 import type { VehicleCategoryMeta } from "@/lib/vehicleCategory";
+import type { OperationModeMeta } from "@/lib/operationModeCatalog";
+import type { VehicleDepartmentMeta } from "@/lib/vehicleDepartment";
 import type { Asset } from "@/types/domain";
 import {
   DIALOG_FORM_FIELD,
@@ -203,11 +205,26 @@ type Props = {
   compact?: boolean;
   year?: string;
   onYearChange?: (year: string) => void;
+  categoryCatalog?: VehicleCategoryMeta[];
+  departmentCatalog?: VehicleDepartmentMeta[];
+  departmentNames?: string[];
+  operationCatalog?: OperationModeMeta[];
 };
 
-export function VehicleAssetFields({ vehicle, onChange, compact = false, year, onYearChange }: Props) {
+export function VehicleAssetFields({
+  vehicle,
+  onChange,
+  compact = false,
+  year,
+  onYearChange,
+  categoryCatalog: catalogProp,
+  departmentCatalog,
+  departmentNames,
+  operationCatalog,
+}: Props) {
   const field = compact ? DIALOG_FORM_FIELD_COMPACT : DIALOG_FORM_FIELD;
-  const { catalog } = useVehicleCategories();
+  const { catalog: hookCatalog } = useVehicleCategories(catalogProp === undefined);
+  const catalog = catalogProp ?? hookCatalog;
   const set = <K extends keyof VehicleFieldState>(key: K, value: VehicleFieldState[K]) =>
     onChange({ ...vehicle, [key]: value });
 
@@ -236,6 +253,7 @@ export function VehicleAssetFields({ vehicle, onChange, compact = false, year, o
         <SearchableAutocomplete
           value={vehicle.modelInput}
           onChange={(v) => set("modelInput", v)}
+          onPick={(v) => set("modelInput", v)}
           options={modelOptions.length > 0 ? modelOptions : []}
           placeholder={compact ? "" : modelOptions.length ? "Type to search models…" : "e.g. Hilux, Prima"}
           filterFn={filterOptionsByQuery}
@@ -278,6 +296,8 @@ export function VehicleAssetFields({ vehicle, onChange, compact = false, year, o
           hideHint
           required
           className={field}
+          departmentCatalog={departmentCatalog}
+          departmentNames={departmentNames}
         />
         <div className={field}>
           <Label>RTA office</Label>
@@ -336,6 +356,7 @@ export function VehicleAssetFields({ vehicle, onChange, compact = false, year, o
         compact={compact}
         vehicleCategory={vehicle.vehicle_category}
         categoryCatalog={catalog}
+        operationCatalog={operationCatalog}
         operation={{
           operation_mode: vehicle.operation_mode ?? "km",
           operation_mode_pick: vehicle.operation_mode_pick,

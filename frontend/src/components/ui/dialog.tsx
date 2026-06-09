@@ -6,6 +6,11 @@ import {
   OverlayPortalProvider,
   useOverlaySelectScrollFix,
 } from "@/components/ui/overlay-portal-context";
+import { VMS_AUTOCOMPLETE_LIST_ATTR } from "@/components/ui/searchable-autocomplete";
+
+function isPortaledAutocompleteTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(`[${VMS_AUTOCOMPLETE_LIST_ATTR}]`));
+}
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -30,7 +35,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => {
+>(({ className, children, onPointerDownOutside, onFocusOutside, ...props }, ref) => {
   const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
   useOverlaySelectScrollFix(portalContainer);
 
@@ -53,6 +58,23 @@ const DialogContent = React.forwardRef<
             "fixed left-[50%] top-[50%] z-50 grid max-h-[min(90dvh,calc(100vh-2rem))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto border bg-background p-4 shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:max-w-3xl sm:rounded-xl sm:p-6 lg:max-w-5xl [&_form]:overflow-visible",
             className
           )}
+          onPointerDownOutside={(event) => {
+            if (isPortaledAutocompleteTarget(event.target)) {
+              event.preventDefault();
+            }
+            onPointerDownOutside?.(event);
+          }}
+          onFocusOutside={(event) => {
+            if (isPortaledAutocompleteTarget(event.target)) {
+              event.preventDefault();
+            }
+            onFocusOutside?.(event);
+          }}
+          onInteractOutside={(event) => {
+            if (isPortaledAutocompleteTarget(event.target)) {
+              event.preventDefault();
+            }
+          }}
           {...props}
         >
           {children}

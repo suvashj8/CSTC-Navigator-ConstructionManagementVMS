@@ -1,0 +1,13 @@
+$kind: http-request
+name: Get Maintenance Statuses
+method: GET
+url: '{{baseUrl}}/api/v1/maintenance-statuses'
+order: 11000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

@@ -1,0 +1,13 @@
+$kind: http-request
+name: Get Vehicle Departments
+method: GET
+url: '{{baseUrl}}/api/v1/vehicle-departments'
+order: 3000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

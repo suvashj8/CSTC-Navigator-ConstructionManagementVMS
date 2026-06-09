@@ -1,0 +1,21 @@
+$kind: http-request
+name: Create Operation Mode
+method: POST
+url: '{{baseUrl}}/api/v1/operation-modes'
+order: 6000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Test Mode"
+    }

@@ -15,17 +15,20 @@ export async function listVehicleCategories() {
 export async function createVehicleCategory(body: {
   name: string;
   description?: string;
-  operation_modes: CategoryOperationModes;
+  operation_modes?: CategoryOperationModes;
 }) {
+  const operation_modes = body.operation_modes ?? "both";
   if (useMock) {
     const row: CustomVehicleCategory = {
       id: `vc-${Date.now()}`,
       name: body.name.trim(),
       description: body.description?.trim() ?? "",
-      operation_modes: body.operation_modes,
+      operation_modes,
     };
     mockCategories = [row, ...mockCategories.filter((c) => c.name.toLowerCase() !== row.name.toLowerCase())];
     return row;
   }
-  return unwrap(api.post("/api/v1/vehicle-categories", body)) as Promise<CustomVehicleCategory>;
+  return unwrap(
+    api.post("/api/v1/vehicle-categories", { ...body, operation_modes })
+  ) as Promise<CustomVehicleCategory>;
 }

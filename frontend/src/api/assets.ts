@@ -77,7 +77,8 @@ export async function updateAsset(id: string, body: Partial<Asset>) {
   return unwrap(api.put(`/api/v1/assets/${id}`, body)) as Promise<Asset>;
 }
 
-export async function deleteAsset(id: string) {
+/** Marks the asset as decommissioned (soft remove). */
+export async function decommissionAsset(id: string) {
   if (useMock) {
     await delay();
     mockAssets = mockAssets.map((a) => (a.id === id ? { ...a, status: "decommissioned" as const } : a));
@@ -85,3 +86,16 @@ export async function deleteAsset(id: string) {
   }
   await unwrap(api.delete(`/api/v1/assets/${id}`));
 }
+
+/** Permanently removes the asset and cannot be undone. */
+export async function permanentlyDeleteAsset(id: string) {
+  if (useMock) {
+    await delay();
+    mockAssets = mockAssets.filter((a) => a.id !== id);
+    return;
+  }
+  await unwrap(api.delete(`/api/v1/assets/${id}`, { params: { permanent: "true" } }));
+}
+
+/** @deprecated Use decommissionAsset or permanentlyDeleteAsset */
+export const deleteAsset = decommissionAsset;

@@ -1,0 +1,13 @@
+$kind: http-request
+name: Get Asset Types
+method: GET
+url: '{{baseUrl}}/api/v1/asset-types'
+order: 7000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

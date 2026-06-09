@@ -1,0 +1,13 @@
+$kind: http-request
+name: Delete Fuel Log
+method: DELETE
+url: '{{baseUrl}}/api/v1/fuel-logs/{{fuelLogId}}'
+order: 4000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

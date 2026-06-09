@@ -55,7 +55,9 @@ export function optionalUUID(v: unknown): string | null {
 }
 
 export function normalizeMaintStatus(s: string): string {
-  switch (s.toLowerCase().trim()) {
+  const trimmed = s.trim();
+  if (!trimmed) return "Scheduled";
+  switch (trimmed.toLowerCase()) {
     case "in progress":
     case "in_progress":
     case "inprogress":
@@ -63,8 +65,10 @@ export function normalizeMaintStatus(s: string): string {
     case "completed":
     case "done":
       return "Completed";
-    default:
+    case "scheduled":
       return "Scheduled";
+    default:
+      return trimmed;
   }
 }
 

@@ -1,6 +1,7 @@
 import type { CategoryOperationModes } from "@/lib/vehicleCategory";
 import { findCategoryInCatalog, type VehicleCategoryMeta } from "@/lib/vehicleCategory";
 import type { OperationMode } from "@/lib/vehicleOperation";
+import { isVehicleAssetType } from "@/lib/assetTypeCatalog";
 import type { AssetType } from "@/types/domain";
 
 export const OPERATION_MODE_OTHER = "Other";
@@ -79,12 +80,10 @@ export function isReservedBuiltinOperationModeName(name: string): boolean {
 
 export function categoryTrackingType(
   vehicleCategory: string,
-  categoryCatalog: VehicleCategoryMeta[]
+  _categoryCatalog: VehicleCategoryMeta[]
 ): CategoryOperationModes {
-  const meta = findCategoryInCatalog(vehicleCategory, categoryCatalog);
-  if (meta) return meta.operationModes;
   if (vehicleCategory === "Dozer") return "hour";
-  return "km";
+  return "both";
 }
 
 export function filterOperationModeOptions(
@@ -135,7 +134,7 @@ export function shouldShowOperationModePicker(
   vehicleCategory: string,
   _categoryCatalog: VehicleCategoryMeta[]
 ): boolean {
-  if (assetType !== "vehicle") return false;
+  if (!isVehicleAssetType(assetType)) return false;
   if (vehicleCategory === "Dozer") return false;
   return true;
 }
@@ -175,26 +174,7 @@ export function isHourlyFromOperationPick(
   }
   if (pick === PLACE_HR_LABEL) return true;
   if (pick === ROUTE_KM_LABEL) return false;
-  const cat = categoryTrackingType(vehicleCategory, categoryCatalog);
-  if (cat === "hour") return true;
-  if (cat === "km") return false;
   return operationMode === "hour";
-}
-
-export function needsOperationBasisToggle(
-  pick: string,
-  vehicleCategory: string,
-  categoryCatalog: VehicleCategoryMeta[],
-  operationCatalog: OperationModeMeta[]
-): boolean {
-  if (isDynamicCustomMode(pick, operationCatalog)) return false;
-  const custom = findOperationModeInCatalog(pick, operationCatalog);
-  if (custom?.isCustom && custom.trackingType === "both") return true;
-  return (
-    categoryTrackingType(vehicleCategory, categoryCatalog) === "both" &&
-    pick !== ROUTE_KM_LABEL &&
-    pick !== PLACE_HR_LABEL
-  );
 }
 
 export function defaultOperationModePick(

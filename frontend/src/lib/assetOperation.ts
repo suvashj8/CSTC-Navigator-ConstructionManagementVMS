@@ -1,4 +1,6 @@
 import type { OperationFieldState } from "@/components/assets/VehicleOperationFields";
+import { assetTypeDisplayLabel, isVehicleAssetType } from "@/lib/assetTypeCatalog";
+import type { AssetTypeMeta } from "@/lib/assetTypeCatalog";
 import type { Asset, AssetType } from "@/types/domain";
 import {
   defaultOperationModePick,
@@ -14,24 +16,19 @@ import {
   usesHourlyOperation,
 } from "@/lib/vehicleOperation";
 
-export function assetTypeLabel(type: AssetType): string {
-  const labels: Record<AssetType, string> = {
-    vehicle: "Vehicle",
-    equipment: "Equipment",
-    tool: "Tool",
-  };
-  return labels[type];
+export function assetTypeLabel(type: AssetType, catalog: AssetTypeMeta[] = []): string {
+  return assetTypeDisplayLabel(type, catalog);
 }
 
-export function formatAssetTypeDetail(asset: Asset): string {
-  if (asset.asset_type === "vehicle") {
+export function formatAssetTypeDetail(asset: Asset, catalog: AssetTypeMeta[] = []): string {
+  if (isVehicleAssetType(asset.asset_type)) {
     return asset.vehicle_category?.trim() || "Vehicle";
   }
-  return assetTypeLabel(asset.asset_type);
+  return assetTypeLabel(asset.asset_type, catalog);
 }
 
 export function defaultOperationModeForAsset(asset: Asset): OperationMode {
-  if (asset.asset_type === "equipment" || asset.asset_type === "tool") return "hour";
+  if (!isVehicleAssetType(asset.asset_type)) return "hour";
   return defaultOperationMode(asset.vehicle_category ?? "");
 }
 
@@ -41,20 +38,16 @@ export function usesHourlyOperationForAsset(
   operationMode: OperationMode
 ): boolean {
   if (operationMode === "custom") return false;
-  if (assetType === "equipment" || assetType === "tool") return true;
+  if (!isVehicleAssetType(assetType)) return true;
   return usesHourlyOperation(vehicleCategory, operationMode);
 }
 
 export function canChooseOperationModeForAsset(
   assetType: AssetType,
-  vehicleCategory: string,
-  catalog: VehicleCategoryMeta[] = []
+  vehicleCategory: string
 ): boolean {
-  if (assetType !== "vehicle") return false;
-  if (!vehicleCategory.trim()) return true;
-  const meta = catalog.find((c) => c.name.toLowerCase() === vehicleCategory.trim().toLowerCase());
-  if (meta) return meta.operationModes === "both";
-  return vehicleCategory === "Other";
+  if (!isVehicleAssetType(assetType)) return false;
+  return vehicleCategory !== "Dozer";
 }
 
 export function matchesOperationModeFilter(
@@ -67,7 +60,7 @@ export function matchesOperationModeFilter(
     asset.asset_type,
     asset.vehicle_category ?? "",
     (asset.operation_mode as OperationMode) ??
-      (asset.asset_type === "vehicle" ? defaultOperationMode(asset.vehicle_category ?? "") : "hour")
+      (isVehicleAssetType(asset.asset_type) ? defaultOperationMode(asset.vehicle_category ?? "") : "hour")
   );
   return filter === "hour" ? hourly : !hourly;
 }
@@ -109,7 +102,7 @@ export function resolveAssetOperation(
     return Number.isFinite(n) ? n : null;
   };
 
-  if (asset.asset_type !== "vehicle") {
+  if (!isVehicleAssetType(asset.asset_type)) {
     return {
       vehicle_category: null,
       operation_mode: "hour",

@@ -1,0 +1,10 @@
+$kind: http-request
+name: Get Tenants
+method: GET
+url: '{{baseUrl}}/api/v1/platform/tenants'
+order: 1000
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{platformToken}}'
