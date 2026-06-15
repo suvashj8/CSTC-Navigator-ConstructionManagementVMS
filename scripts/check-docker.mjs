@@ -1,17 +1,32 @@
 import { execSync } from "node:child_process";
 
-try {
-  execSync("docker info", { stdio: "ignore" });
-} catch {
-  console.error("");
-  console.error("Docker Desktop is not running.");
-  console.error("");
-  console.error("  1. Open Docker Desktop from the Start menu");
-  console.error('  2. Wait until the status shows "Engine running"');
-  console.error("  3. Run:  npm run docker:up");
-  console.error("  4. Run:  npm run dev");
-  console.error("");
-  console.error("To start the UI only (no database):  npm run dev:ui");
-  console.error("");
-  process.exit(1);
+const attempts = 3;
+const delayMs = 2000;
+
+function dockerReady() {
+  try {
+    execSync("docker info", { stdio: "ignore", timeout: 20_000 });
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+for (let i = 1; i <= attempts; i++) {
+  if (dockerReady()) process.exit(0);
+  if (i < attempts) {
+    console.warn(`Docker engine not ready (attempt ${i}/${attempts}) — retrying...`);
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+}
+
+console.error("");
+console.error("Docker Desktop engine is not responding.");
+console.error("");
+console.error("  1. Fully quit Docker Desktop (right-click tray icon → Quit)");
+console.error('  2. Reopen Docker Desktop and wait until it says "Engine running"');
+console.error("  3. Run:  npm run dev");
+console.error("");
+console.error("UI only (API must already be on :3000):  npm run dev:ui-only");
+console.error("");
+process.exit(1);

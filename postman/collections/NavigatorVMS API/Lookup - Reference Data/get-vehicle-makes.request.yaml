@@ -1,0 +1,13 @@
+$kind: http-request
+name: Get Vehicle Makes
+method: GET
+url: '{{baseUrl}}/api/v1/vehicle-makes'
+order: 1100
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{tenantToken}}'
+headers:
+  - key: X-Tenant-Subdomain
+    value: '{{tenantSubdomain}}'

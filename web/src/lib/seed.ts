@@ -5,8 +5,7 @@ import type { TenantManager } from "./tenant-manager";
 
 /** Reset demo role accounts to known passwords (idempotent; does not wipe assets). */
 export async function syncDemoAccounts(tm: TenantManager): Promise<boolean> {
-  await tm.initMain();
-  await tm.syncConnectionHosts();
+  await tm.ensureReady();
   let tenantId: string | null = null;
   try {
     const info = await tm.bySubdomain(DEMO_SUBDOMAIN);
@@ -21,13 +20,12 @@ export async function syncDemoAccounts(tm: TenantManager): Promise<boolean> {
 
 /** Ensure platform super-user password matches demo-accounts.ts. */
 export async function syncPlatformSuperUser(tm: TenantManager): Promise<void> {
-  await tm.initMain();
+  await tm.ensureReady();
   await seedSuperUser(tm);
 }
 
 export async function runSeed(tm: TenantManager): Promise<void> {
-  await tm.initMain();
-  await tm.syncConnectionHosts();
+  await tm.ensureReady();
   await seedSuperUser(tm);
 
   let tenantId: string | null = null;

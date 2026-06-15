@@ -24,12 +24,18 @@ async function main() {
   console.log("Navigator VMS — health check\n");
 
   let dockerOk = false;
-  try {
-    execSync("docker info", { stdio: "ignore" });
-    dockerOk = true;
-    console.log("Docker:           running");
-  } catch {
-    console.log("Docker:           NOT running — start Docker Desktop");
+  for (let i = 0; i < 3 && !dockerOk; i++) {
+    try {
+      execSync("docker info", { stdio: "ignore", timeout: 20_000 });
+      dockerOk = true;
+    } catch {
+      if (i < 2) await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  if (dockerOk) {
+    console.log("Docker:           engine responding");
+  } else {
+    console.log("Docker:           engine NOT responding — quit Docker Desktop fully, reopen, wait for Engine running");
   }
 
   const p5432 = await probe("localhost", 5432);
@@ -57,6 +63,45 @@ async function main() {
       const tenants = await pool.query(`SELECT subdomain FROM tenants WHERE subdomain = 'demo'`);
       console.log(`VMS database:     connected (${VMS_USER}@${VMS_PORT}/${VMS_DB})`);
       console.log(`Demo tenant:      ${tenants.rowCount ? "yes" : "missing — run: npm run seed"}`);
+      if (tenants.rowCount) {
+        const conn = await pool.query(
+          `SELECT c.host, c.port FROM tenant_db_connections c
+           JOIN tenants t ON t.tenant_id = c.tenant_id WHERE t.subdomain = 'demo'`
+        );
+        const row = conn.rows[0];
+        const expectHost = "localhost";
+        const expectPort = VMS_PORT;
+        if (row && (row.host !== expectHost || Number(row.port) !== expectPort)) {
+          console.log(
+            `Tenant DB link:   stale (${row.host}:${row.port}) — run: npm run seed  (login auto-fixes after API restart)`
+          );
+        } else if (row) {
+          console.log(`Tenant DB link:   ok (${row.host}:${row.port})`);
+        }
+        const tdb = await pool.query(
+          `SELECT c.database_name FROM tenant_db_connections c
+           JOIN tenants t ON t.tenant_id = c.tenant_id WHERE t.subdomain = 'demo'`
+        );
+        const demoDb = tdb.rows[0]?.database_name;
+        if (demoDb) {
+          const tenantPool = new pg.Pool({
+            host: "localhost",
+            port: VMS_PORT,
+            user: VMS_USER,
+            password: VMS_PASS,
+            database: demoDb,
+            connectionTimeoutMillis: 3000,
+          });
+          try {
+            const admin = await tenantPool.query(
+              `SELECT 1 FROM users WHERE email = 'admin@vms.local' AND status = 'active' LIMIT 1`
+            );
+            console.log(`Demo admin user:  ${admin.rowCount ? "yes" : "missing — run: npm run docker:reseed"}`);
+          } finally {
+            await tenantPool.end();
+          }
+        }
+      }
       await pool.end();
     } catch (e) {
       console.log(`VMS database:     FAILED — ${(e).message}`);
@@ -71,13 +116,18 @@ async function main() {
   }
 
   const api = await probe("localhost", 3000);
-  console.log(`API :3000:        ${api ? "in use" : "not running — run: npm run dev:full:host"}`);
+  console.log(`API :3000:        ${api ? "in use" : "not running — run: npm run dev"}`);
+  if (!api && p5434) {
+    console.log("                  (Postgres is up but API is missing — UI alone cannot sign in)");
+  }
 
-  console.log("\nQuick start:");
-  console.log("  npm run docker:infra");
-  console.log("  npm run seed");
-  console.log("  npm run dev:full:host");
+  console.log("\nRecommended dev flow (fewest login issues):");
+  console.log("  npm run dev");
   console.log("  Login: subdomain demo | admin@vms.local / admin123");
+  console.log("\nIf login still fails:");
+  console.log("  npm run docker:reseed");
+  console.log("\nFull Docker (API in containers) — after code changes:");
+  console.log("  npm run docker:reset");
 }
 
 main().catch((e) => {

@@ -21,11 +21,10 @@ type EnsureOpts = { force?: boolean };
  * Always syncs passwords when the demo tenant is present (fixes hash drift).
  */
 export async function ensureDemoSeeded(tm: TenantManager, opts?: EnsureOpts): Promise<void> {
-  if (demoReady && !opts?.force) return;
-
+  // Always re-sync demo passwords on login — demoReady must not skip hash repair.
   try {
     const synced = await syncDemoAccounts(tm);
-    if (synced) {
+    if (synced && !opts?.force) {
       demoReady = true;
       platformReady = true;
       return;
@@ -39,10 +38,17 @@ export async function ensureDemoSeeded(tm: TenantManager, opts?: EnsureOpts): Pr
   platformReady = true;
 }
 
-/** Force password re-sync on demo login failure. */
+/** Force full demo repair on login failure (re-sync + seed if needed). */
 export async function repairDemoSeeded(tm: TenantManager): Promise<void> {
   demoReady = false;
-  await ensureDemoSeeded(tm, { force: true });
+  try {
+    await syncDemoAccounts(tm);
+  } catch {
+    /* fall through to full seed */
+  }
+  await runSeedOnce(tm);
+  demoReady = true;
+  platformReady = true;
 }
 
 /** Ensure platform super-user exists with the documented password. */

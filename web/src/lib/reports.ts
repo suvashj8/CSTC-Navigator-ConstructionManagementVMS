@@ -13,6 +13,28 @@ const REPORT_TITLES: Record<string, string> = {
   "overdue-allocations": "Overdue allocations",
 };
 
+type PdfExportResult = { path: string; name: string };
+type PdfGenerationStrategy = "pdfkit";
+
+interface PdfGenerator {
+  readonly strategy: PdfGenerationStrategy;
+  export(dir: string, reportType: string, rows: Record<string, unknown>[]): Promise<PdfExportResult>;
+}
+
+/**
+ * Current production PDF renderer.
+ *
+ * Pdfkit is intentionally kept as the default because it is already installed,
+ * lightweight, and works well for simple tabular reports. If reports later need
+ * highly branded/complex layouts, add a new strategy here that renders HTML via
+ * Puppeteer or Playwright, then select it from `resolvePdfGenerator` without
+ * changing API handlers or report-job flow.
+ */
+const pdfkitGenerator: PdfGenerator = {
+  strategy: "pdfkit",
+  export: exportPdfWithPdfkit,
+};
+
 function formatColumnHeader(key: string): string {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -69,7 +91,28 @@ export async function exportExcel(dir: string, reportType: string, rows: Record<
   return { path: filePath, name };
 }
 
-export async function exportPdf(dir: string, reportType: string, rows: Record<string, unknown>[]): Promise<{ path: string; name: string }> {
+function resolvePdfGenerator(): PdfGenerator {
+  const configuredStrategy = process.env.REPORT_PDF_STRATEGY?.trim().toLowerCase();
+
+  switch (configuredStrategy) {
+    case undefined:
+    case "":
+    case "pdfkit":
+      return pdfkitGenerator;
+    default:
+      // Keep exports running smoothly even if an unsupported strategy is set.
+      console.warn(
+        `[reports] Unsupported REPORT_PDF_STRATEGY "${configuredStrategy}". Falling back to pdfkit.`
+      );
+      return pdfkitGenerator;
+  }
+}
+
+export async function exportPdf(dir: string, reportType: string, rows: Record<string, unknown>[]): Promise<PdfExportResult> {
+  return resolvePdfGenerator().export(dir, reportType, rows);
+}
+
+async function exportPdfWithPdfkit(dir: string, reportType: string, rows: Record<string, unknown>[]): Promise<PdfExportResult> {
   const name = `${reportType}-${randomUUID().slice(0, 8)}.pdf`;
   const filePath = path.join(dir, name);
   await fs.promises.mkdir(dir, { recursive: true, mode: 0o755 });

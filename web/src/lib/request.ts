@@ -19,6 +19,7 @@ export async function tenantContext(req: NextRequest): Promise<
   if (!claims.tenant_id) return { error: forbidden() };
   try {
     const tm = getTenantManager();
+    await tm.ensureReady();
     const pool = await tm.pool(claims.tenant_id);
     return { pool, claims, tenantId: claims.tenant_id };
   } catch (e) {

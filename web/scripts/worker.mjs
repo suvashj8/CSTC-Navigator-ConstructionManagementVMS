@@ -6,27 +6,22 @@ const { Pool } = pg;
 function dbConfig() {
   return {
     host: process.env.MAIN_DB_HOST ?? "localhost",
-    port: Number(process.env.MAIN_DB_PORT ?? 5432),
+    port: Number(process.env.MAIN_DB_PORT ?? 15432),
     user: process.env.MAIN_DB_USER ?? "vms",
     password: process.env.MAIN_DB_PASSWORD ?? "vms",
     database: process.env.MAIN_DB_NAME ?? "vms_main",
   };
 }
 
-/** Match tenant-manager: host dev uses 15432; containers use postgres:5432. */
-function resolveTenantDbEndpoint(storedHost, storedPort) {
+/** Tenant DBs share MAIN_DB_HOST/PORT — ignore stale registry from host/Docker mode switches. */
+function resolveTenantDbEndpoint(_storedHost, _storedPort) {
   const cfg = dbConfig();
-  const cfgPort = Number(cfg.port);
-  let host = (storedHost ?? "").trim() || cfg.host;
-  if (host === "postgres" && cfg.host !== "postgres") {
-    host = cfg.host;
-  }
-  if (cfg.host === "postgres" && (host === "localhost" || host === "127.0.0.1")) {
-    host = "postgres";
-  }
-  const onHostMachine = cfg.host !== "postgres";
-  const port = onHostMachine ? cfgPort : Number(storedPort) || cfgPort;
-  return { host, port };
+  return { host: cfg.host, port: cfg.port };
+}
+
+async function ensureReady(main) {
+  const cfg = dbConfig();
+  await main.query(`UPDATE tenant_db_connections SET host = $1, port = $2`, [cfg.host, cfg.port]);
 }
 
 function getMainPool() {
@@ -115,6 +110,7 @@ async function runScan() {
   console.log("[worker] expiry scan started");
   const main = getMainPool();
   try {
+    await ensureReady(main);
     const tenants = await listActiveTenants(main);
     for (const tid of tenants) {
       const pool = await tenantPool(main, tid);
@@ -134,6 +130,18 @@ async function runScan() {
 
 process.on("unhandledRejection", (e) => console.error("[worker] unhandled rejection:", e));
 process.on("uncaughtException", (e) => console.error("[worker] uncaught exception:", e));
+
+void (async () => {
+  const main = getMainPool();
+  try {
+    await ensureReady(main);
+    console.log("[worker] tenant DB connections synced to", `${dbConfig().host}:${dbConfig().port}`);
+  } catch (e) {
+    console.error("[worker] startup sync failed:", e);
+  } finally {
+    await main.end();
+  }
+})();
 
 console.log("[worker] scheduling daily expiry scan at 06:00 UTC");
 cron.schedule("0 6 * * *", () => {

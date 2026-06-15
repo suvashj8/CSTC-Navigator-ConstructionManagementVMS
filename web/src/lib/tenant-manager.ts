@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, PoolConfig } from "pg";
 import bcrypt from "bcryptjs";
 import { getMainPool } from "./db";
 import { mainUp, tenantUp } from "./migrate";
@@ -11,19 +11,69 @@ export type TenantInfo = {
   connUrl: string;
 };
 
-const pools = new Map<string, Pool>();
+interface CachedPool {
+  pool: Pool;
+  createdAt: number;
+  lastUsed: number;
+}
+
+const pools = new Map<string, CachedPool>();
+let ensureReadyInflight: Promise<void> | null = null;
+
+const POOL_MAX_AGE_MS = 30 * 60 * 1000;
+const POOL_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const POOL_HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+
+let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+
+function startPoolCleanup(): void {
+  if (cleanupInterval) return;
+  cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [tenantId, cached] of pools.entries()) {
+      const age = now - cached.createdAt;
+      const idle = now - cached.lastUsed;
+      if (age > POOL_MAX_AGE_MS || idle > POOL_IDLE_TIMEOUT_MS) {
+        void cached.pool.end().catch(() => {});
+        pools.delete(tenantId);
+      }
+    }
+  }, POOL_HEALTH_CHECK_INTERVAL_MS);
+  cleanupInterval.unref?.();
+}
+
+function stopPoolCleanup(): void {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+}
 
 function clearTenantPoolCache(): void {
-  for (const p of pools.values()) {
-    void p.end().catch(() => {});
+  stopPoolCleanup();
+  for (const cached of pools.values()) {
+    void cached.pool.end().catch(() => {});
   }
   pools.clear();
+}
+
+export function shutdownPools(): void {
+  clearTenantPoolCache();
+}
+
+async function healthCheckPool(pool: Pool): Promise<boolean> {
+  try {
+    await pool.query("SELECT 1");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function dbConfig() {
   return {
     host: process.env.MAIN_DB_HOST ?? "localhost",
-    port: process.env.MAIN_DB_PORT ?? "5432",
+    port: process.env.MAIN_DB_PORT ?? "15432",
     user: process.env.MAIN_DB_USER ?? "vms",
     password: process.env.MAIN_DB_PASSWORD ?? "vms",
   };
@@ -33,33 +83,32 @@ function buildConnUrl(host: string, port: number, user: string, pass: string, da
   return `postgres://${user}:${encodeURIComponent(pass)}@${host}:${port}/${database}`;
 }
 
-/** API on host machine must use published Docker port (e.g. 15432), not container port 5432. */
+/**
+ * Tenant DBs always live on the same Postgres as the main registry.
+ * Use runtime MAIN_DB_HOST/PORT — never stale rows from host-vs-Docker switches
+ * (e.g. localhost:15432 vs postgres:5432).
+ */
 function resolveTenantDbEndpoint(
-  storedHost: string | null | undefined,
-  storedPort: number | null | undefined
+  _storedHost: string | null | undefined,
+  _storedPort: number | null | undefined
 ): { host: string; port: number } {
   const cfg = dbConfig();
-  const cfgPort = Number(cfg.port);
-  const stored = (storedHost ?? "").trim();
-  let host = stored || cfg.host;
-  if (host === "postgres" && cfg.host !== "postgres") {
-    host = cfg.host;
-  }
-  const onHostMachine = cfg.host !== "postgres";
-  const port = onHostMachine ? cfgPort : storedPort || cfgPort;
-  return { host, port };
+  return { host: cfg.host, port: Number(cfg.port) };
 }
 
 async function connect(url: string): Promise<Pool> {
   const u = new URL(url);
-  const pool = new Pool({
+  const config: PoolConfig = {
     host: u.hostname,
     port: Number(u.port || 5432),
     user: decodeURIComponent(u.username),
     password: decodeURIComponent(u.password),
     database: u.pathname.slice(1),
     max: 10,
-  });
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  };
+  const pool = new Pool(config);
   return pool;
 }
 
@@ -106,15 +155,33 @@ export function getTenantManager() {
       await mainUp(main);
     },
 
-    /** Fix tenant DB host/port when API runs on host but registry still has Docker-internal values. */
+    /** Align registry host/port with current runtime (host dev 15432 vs Docker postgres:5432). */
     async syncConnectionHosts() {
       const cfg = dbConfig();
-      if (cfg.host === "postgres") return;
-      await main.query(
-        `UPDATE tenant_db_connections SET host = $1, port = $2 WHERE host = 'postgres' OR port = 5432`,
-        [cfg.host, Number(cfg.port)]
-      );
+      await main.query(`UPDATE tenant_db_connections SET host = $1, port = $2`, [
+        cfg.host,
+        Number(cfg.port),
+      ]);
       clearTenantPoolCache();
+    },
+
+    /** Migrate main DB and sync tenant connection registry once per process (retries after failure). */
+    async ensureReady() {
+      if (!ensureReadyInflight) {
+        ensureReadyInflight = (async () => {
+          await mainUp(main);
+          const cfg = dbConfig();
+          await main.query(`UPDATE tenant_db_connections SET host = $1, port = $2`, [
+            cfg.host,
+            Number(cfg.port),
+          ]);
+          clearTenantPoolCache();
+        })().catch((e) => {
+          ensureReadyInflight = null;
+          throw e;
+        });
+      }
+      await ensureReadyInflight;
     },
 
     async bySubdomain(subdomain: string): Promise<TenantInfo> {
@@ -144,12 +211,25 @@ export function getTenantManager() {
     },
 
     async pool(tenantId: string): Promise<Pool> {
+      await this.ensureReady();
+      startPoolCleanup();
+      const now = Date.now();
       const cached = pools.get(tenantId);
-      if (cached) return cached;
+      
+      if (cached) {
+        const healthy = await healthCheckPool(cached.pool);
+        if (healthy) {
+          cached.lastUsed = now;
+          return cached.pool;
+        }
+        await cached.pool.end().catch(() => {});
+        pools.delete(tenantId);
+      }
+      
       const info = await this.byId(tenantId);
       const p = await connect(info.connUrl);
       await tenantUp(p);
-      pools.set(tenantId, p);
+      pools.set(tenantId, { pool: p, createdAt: now, lastUsed: now });
       return p;
     },
 
@@ -211,7 +291,8 @@ export function getTenantManager() {
         adminEmail.toLowerCase(),
         hash,
       ]);
-      pools.set(tenantId, tp);
+      const now = Date.now();
+      pools.set(tenantId, { pool: tp, createdAt: now, lastUsed: now });
       return tenantId;
     },
 
