@@ -2,6 +2,29 @@ import * as React from "react";
 
 const OverlayPortalContext = React.createContext<HTMLElement | null>(null);
 
+const OVERLAY_DISMISS_EVENT = "vms:overlay-dismiss";
+
+type OverlayDismissDetail = {
+  sourceId?: string;
+};
+
+function dismissOtherOverlays(sourceId?: string) {
+  document.dispatchEvent(new CustomEvent<OverlayDismissDetail>(OVERLAY_DISMISS_EVENT, { detail: { sourceId } }));
+}
+
+function useOverlayDismissListener(sourceId: string, onDismiss: () => void) {
+  React.useEffect(() => {
+    const onDismissEvent = (event: Event) => {
+      const source = event instanceof CustomEvent ? (event.detail as OverlayDismissDetail | undefined)?.sourceId : undefined;
+      if (source === sourceId) return;
+      onDismiss();
+    };
+
+    document.addEventListener(OVERLAY_DISMISS_EVENT, onDismissEvent);
+    return () => document.removeEventListener(OVERLAY_DISMISS_EVENT, onDismissEvent);
+  }, [onDismiss, sourceId]);
+}
+
 function OverlayPortalProvider({
   container,
   children,
@@ -64,4 +87,10 @@ function useOverlaySelectScrollFix(container: HTMLElement | null) {
   }, [container]);
 }
 
-export { OverlayPortalProvider, useOverlayPortalContainer, useOverlaySelectScrollFix };
+export {
+  dismissOtherOverlays,
+  OverlayPortalProvider,
+  useOverlayDismissListener,
+  useOverlayPortalContainer,
+  useOverlaySelectScrollFix,
+};

@@ -104,8 +104,14 @@ Change `appId` before publishing to stores.
 
 ## Mobile UX included
 
-- Responsive sidebar → bottom sheet menu on phones (existing)
-- Card-based lists on small screens (existing)
+- **Single codebase** — same features on web, PWA, Android, and iOS (no separate mobile app logic)
+- Custom catalog pickers (location type, insurance, asset type, **Custom Make**, etc.) in dialogs
+- Asset **Decommission / Delete** flows with mobile-stacked confirmation buttons
+- **No leading minus** on text inputs (global `Input` / `Textarea` rule)
+- Responsive sidebar → sheet menu on phones
+- Card-based lists on screens &lt; 7 inch (assets, allocations, insurance, reports, …)
+- Full-width touch targets on phone (44px min); compact density only on desktop
+- Dialog / alert safe-area padding for notched devices
 - Safe area insets (notch / home indicator)
 - Android hardware back button handling
 - Status bar styling (iOS / Android)

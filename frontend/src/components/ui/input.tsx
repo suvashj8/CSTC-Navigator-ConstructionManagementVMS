@@ -1,8 +1,40 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import {
+  blockLeadingMinus,
+  preventLeadingMinusKey,
+  shouldBlockLeadingMinus,
+} from "@/lib/inputSanitize";
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => (
+const Input = ({
+  className,
+  type,
+  onChange,
+  onKeyDown,
+  ref,
+  ...props
+}: React.ComponentProps<"input">) => {
+  const sanitize = shouldBlockLeadingMinus(type);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (sanitize) {
+      const next = blockLeadingMinus(e.target.value);
+      if (next !== e.target.value) {
+        e.target.value = next;
+      }
+    }
+    onChange?.(e);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (sanitize && preventLeadingMinusKey(e)) {
+      e.preventDefault();
+      return;
+    }
+    onKeyDown?.(e);
+  };
+
+  return (
     <input
       type={type}
       className={cn(
@@ -10,10 +42,11 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         className
       )}
       ref={ref}
+      onChange={handleChange}
+      onKeyDown={handleKeyDown}
       {...props}
     />
-  )
-);
-Input.displayName = "Input";
+  );
+};
 
 export { Input };

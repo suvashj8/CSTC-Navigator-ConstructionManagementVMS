@@ -15,14 +15,16 @@ function licenseStatus(expiry: string): DriverProfile["status"] {
   return "valid";
 }
 
-export async function listDrivers(params: { page?: number; per_page?: number; search?: string } = {}) {
+export async function listDrivers(
+  params: { page?: number; per_page?: number; search?: string } = {}
+): Promise<Paginated<DriverProfile>> {
   if (useMock) {
     await delay();
     return paginate(mockDrivers, params.page ?? 1, params.per_page ?? 10, params.search, (d, q) =>
       `${d.name} ${d.license_no}`.toLowerCase().includes(q)
     ) as Paginated<DriverProfile>;
   }
-  return unwrapPaginated(api.get("/api/v1/drivers", { params }));
+  return unwrapPaginated<DriverProfile>(api.get("/api/v1/drivers", { params }));
 }
 
 export async function createDriver(body: {

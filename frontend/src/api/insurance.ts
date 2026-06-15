@@ -15,12 +15,12 @@ function policyStatus(expiry: string): InsurancePolicy["status"] {
   return "active";
 }
 
-export async function listInsurance(params: { page?: number; per_page?: number } = {}) {
+export async function listInsurance(params: { page?: number; per_page?: number } = {}): Promise<Paginated<InsurancePolicy>> {
   if (useMock) {
     await delay();
     return paginate(mockInsurance, params.page ?? 1, params.per_page ?? 10) as Paginated<InsurancePolicy>;
   }
-  return unwrapPaginated(api.get("/api/v1/insurance", { params }));
+  return unwrapPaginated<InsurancePolicy>(api.get("/api/v1/insurance", { params }));
 }
 
 export async function createInsurance(body: {

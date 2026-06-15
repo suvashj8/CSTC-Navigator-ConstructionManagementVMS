@@ -6,14 +6,14 @@ const useMock = import.meta.env.VITE_USE_MOCK === "true";
 
 let mockUsers = [...MOCK_USERS];
 
-export async function listUsers(params: { page?: number; per_page?: number; search?: string } = {}) {
+export async function listUsers(params: { page?: number; per_page?: number; search?: string } = {}): Promise<Paginated<User>> {
   if (useMock) {
     await delay();
     return paginate(mockUsers, params.page ?? 1, params.per_page ?? 10, params.search, (u, q) =>
       `${u.name} ${u.email} ${u.role}`.toLowerCase().includes(q)
     ) as Paginated<User>;
   }
-  return unwrapPaginated(api.get("/api/v1/users", { params }));
+  return unwrapPaginated<User>(api.get("/api/v1/users", { params }));
 }
 
 export async function createUser(body: {

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { HardHat, Lock, Mail, Sparkles, Truck } from "lucide-react";
 import { login } from "@/api/auth";
 import { useAuthStore } from "@/store/auth";
 import { DEMO_ACCOUNTS, DEMO_SUBDOMAIN } from "@/lib/demo-accounts";
+import { loginErrorHint, stackHintFromHealth, type StackHealth } from "@/lib/stack-hint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,12 +20,37 @@ export default function LoginPage() {
   const [selectedRole, setSelectedRole] = useState("Admin");
   const [email, setEmail] = useState("admin@vms.local");
   const [password, setPassword] = useState("admin123");
+  const [stackHint, setStackHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/health")
+      .then(async (res) => {
+        const json = (await res.json()) as {
+          success?: boolean;
+          data?: StackHealth;
+          error?: { message?: string };
+        };
+        if (cancelled) return;
+        const payload = json.data;
+        const hint = stackHintFromHealth(payload);
+        if (hint) setStackHint(hint);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStackHint(stackHintFromHealth({ api: "down" }));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function pickDemoAccount(account: (typeof DEMO_ACCOUNTS)[number]) {
     setSelectedRole(account.role);
     setEmail(account.email);
     setPassword(account.password);
-    if (!tenantSubdomain) setTenantSubdomain(DEMO_SUBDOMAIN);
+    setTenantSubdomain(DEMO_SUBDOMAIN);
   }
 
   async function signIn(subdomain: string, loginEmail: string, loginPassword: string) {
@@ -44,20 +70,28 @@ export default function LoginPage() {
       nav("/dashboard", { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign in failed";
-      const infra =
-        msg.includes("database") ||
-        msg.includes("reach API") ||
-        msg.includes("demo setup") ||
-        msg.includes("Docker") ||
-        msg.includes("dev:full:host");
-      toast.error(infra ? "Cannot connect to the API or database" : msg, {
-        description: infra
-          ? "Start Docker Desktop, then from project root run: npm run dev:full:host"
-          : msg.includes("invalid")
-            ? "Subdomain must be demo. Tap a role below to fill credentials, then try again."
-            : undefined,
-        duration: 10000,
-      });
+      const lower = msg.toLowerCase();
+      const isDemoCreds =
+        sub === DEMO_SUBDOMAIN &&
+        DEMO_ACCOUNTS.some((a) => a.email === normalizedEmail && a.password === normalizedPassword);
+
+      if (lower.includes("invalid") && isDemoCreds) {
+        toast.error("Demo data may be out of date", {
+          description: "Run: npm run docker:reseed — then sign in again",
+          duration: 12000,
+        });
+        return;
+      }
+      if (lower.includes("invalid")) {
+        toast.error(msg, {
+          description: `Use subdomain "${DEMO_SUBDOMAIN}" and tap a demo role below.`,
+          duration: 12000,
+        });
+        return;
+      }
+
+      const { title, description } = loginErrorHint(msg);
+      toast.error(title, { description, duration: 12000 });
     } finally {
       setLoading(false);
     }
@@ -118,6 +152,14 @@ export default function LoginPage() {
             <CardDescription>Sign in to your VMS workspace</CardDescription>
           </CardHeader>
           <CardContent>
+            {stackHint && (
+              <div
+                role="alert"
+                className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100"
+              >
+                {stackHint}
+              </div>
+            )}
             <form
               className="space-y-4"
               onSubmit={(e) => {

@@ -33,17 +33,20 @@ export function apiErrorMessage(err: unknown): string {
     if (msg) return msg;
     const status = res?.status;
     if (status === 503) {
-      return "Database not ready — start Docker, then run npm run dev:full:host from the project root.";
+      return msg ?? "Database not ready — start Docker Desktop, then run npm run dev from the project root.";
+    }
+    if (status === 401 && msg?.includes("invalid")) {
+      return "invalid tenant or credentials";
     }
     if (status === 500 || status === 502 || status === 504) {
-      return "Cannot reach API. Start Docker, then run npm run dev:full:host from the project root.";
+      return "Cannot reach API. Start Docker Desktop, then run npm run dev from the project root.";
     }
     if (status) return `Request failed (${status})`;
   }
   if (err && typeof err === "object" && "code" in err) {
     const code = (err as { code?: string }).code;
     if (code === "ERR_NETWORK" || code === "ECONNREFUSED") {
-      return "Cannot reach API. Start Docker, then run npm run dev:full:host from the project root.";
+      return "Cannot reach API. Start Docker Desktop, then run npm run dev from the project root.";
     }
   }
   if (err instanceof Error && err.message) return err.message;

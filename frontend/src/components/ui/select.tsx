@@ -2,22 +2,56 @@ import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useOverlayPortalContainer } from "@/components/ui/overlay-portal-context";
+import {
+  dismissOtherOverlays,
+  useOverlayDismissListener,
+  useOverlayPortalContainer,
+} from "@/components/ui/overlay-portal-context";
 
-const Select = ({
-  modal,
-  ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) => {
-  const inOverlay = useOverlayPortalContainer();
-  return <SelectPrimitive.Root modal={modal ?? !inOverlay} {...props} />;
+type SelectProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> & {
+  modal?: boolean;
+};
+
+const Select = ({ modal: _modal, ...props }: SelectProps) => {
+  const sourceId = React.useId();
+  const { open, defaultOpen, onOpenChange, ...rootProps } = props;
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false);
+  const isControlled = open !== undefined;
+  const resolvedOpen = isControlled ? open : uncontrolledOpen;
+
+  const setOpen = React.useCallback(
+    (nextOpen: boolean) => {
+      if (!isControlled) setUncontrolledOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [isControlled, onOpenChange]
+  );
+
+  useOverlayDismissListener(
+    sourceId,
+    React.useCallback(() => setOpen(false), [setOpen])
+  );
+
+  return (
+    <SelectPrimitive.Root
+      {...rootProps}
+      open={resolvedOpen}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) dismissOtherOverlays(sourceId);
+        setOpen(nextOpen);
+      }}
+    />
+  );
 };
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
-const SelectTrigger = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+const SelectTrigger = ({
+  className,
+  children,
+  ref,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Trigger>) => (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -31,13 +65,16 @@ const SelectTrigger = React.forwardRef<
       <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
-));
-SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
+);
 
-const SelectContent = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position, onCloseAutoFocus, ...props }, ref) => {
+const SelectContent = ({
+  className,
+  children,
+  position,
+  onCloseAutoFocus,
+  ref,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Content>) => {
   const overlayContainer = useOverlayPortalContainer();
   const resolvedPosition = position ?? (overlayContainer ? "popper" : "item-aligned");
 
@@ -69,21 +106,13 @@ const SelectContent = React.forwardRef<
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );
-});
-SelectContent.displayName = SelectPrimitive.Content.displayName;
+};
 
-const SelectLabel = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Label>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>
->(({ className, ...props }, ref) => (
+const SelectLabel = ({ className, ref, ...props }: React.ComponentProps<typeof SelectPrimitive.Label>) => (
   <SelectPrimitive.Label ref={ref} className={cn("py-1.5 pl-8 pr-2 text-sm font-semibold", className)} {...props} />
-));
-SelectLabel.displayName = SelectPrimitive.Label.displayName;
+);
 
-const SelectItem = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+const SelectItem = ({ className, children, ref, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
@@ -99,8 +128,7 @@ const SelectItem = React.forwardRef<
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
   </SelectPrimitive.Item>
-));
-SelectItem.displayName = SelectPrimitive.Item.displayName;
+);
 
 /** Prevents Radix height calc failure when a select has zero options. */
 function SelectEmpty({ message = "No options available" }: { message?: string }) {
@@ -111,13 +139,9 @@ function SelectEmpty({ message = "No options available" }: { message?: string })
   );
 }
 
-const SelectSeparator = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Separator>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator>
->(({ className, ...props }, ref) => (
+const SelectSeparator = ({ className, ref, ...props }: React.ComponentProps<typeof SelectPrimitive.Separator>) => (
   <SelectPrimitive.Separator ref={ref} className={cn("-mx-1 my-1 h-px bg-muted", className)} {...props} />
-));
-SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
+);
 
 /** @deprecated Scroll buttons removed — viewport uses native overflow scroll. */
 const SelectScrollUpButton = () => null;

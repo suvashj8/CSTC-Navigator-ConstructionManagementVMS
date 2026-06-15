@@ -29,11 +29,12 @@ export type CustomOperationMode = {
 
 export function mergeOperationModes(custom: CustomOperationMode[]): OperationModeMeta[] {
   const customNames = new Set(custom.map((m) => m.name.toLowerCase()));
-  const builtins: OperationModeMeta[] = [
+  const builtins = [
     { name: ROUTE_KM_LABEL, trackingType: "km", isCustom: false },
     { name: PLACE_HR_LABEL, trackingType: "hour", isCustom: false },
     { name: OPERATION_MODE_OTHER, trackingType: "both", isCustom: false },
-  ].filter((b) => !customNames.has(b.name.toLowerCase()));
+  ] satisfies OperationModeMeta[];
+  const visibleBuiltins = builtins.filter((b) => !customNames.has(b.name.toLowerCase()));
   const customs = custom.map((m) => ({
     id: m.id,
     name: m.name,
@@ -42,7 +43,7 @@ export function mergeOperationModes(custom: CustomOperationMode[]): OperationMod
     fieldLabels: normalizeFieldLabels(m.field_labels),
     isCustom: true,
   }));
-  return [...builtins, ...customs].sort((a, b) => {
+  return [...visibleBuiltins, ...customs].sort((a, b) => {
     if (a.name === OPERATION_MODE_OTHER) return 1;
     if (b.name === OPERATION_MODE_OTHER) return -1;
     return a.name.localeCompare(b.name);

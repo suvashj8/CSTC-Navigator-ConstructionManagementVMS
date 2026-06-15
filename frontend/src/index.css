@@ -120,6 +120,59 @@ html.platform-ios body {
   a {
     touch-action: manipulation;
   }
+
+  [role="combobox"] {
+    min-height: 2.75rem;
+  }
+
+  [role="option"] {
+    min-height: 2.75rem;
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+  }
+}
+
+/* Stacked full-width actions on phone; inline on desktop */
+.mobile-action-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+}
+
+.mobile-action-stack > * {
+  width: 100%;
+  min-height: 2.75rem;
+}
+
+@media (min-width: 640px) {
+  .mobile-action-stack {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .mobile-action-stack > * {
+    width: auto;
+    min-height: 2.5rem;
+  }
+}
+
+.mobile-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mobile-action-row > button,
+.mobile-action-row [role="button"] {
+  min-height: 2.75rem;
+  flex: 1 1 auto;
+}
+
+@media (min-width: 640px) {
+  .mobile-action-row > button,
+  .mobile-action-row [role="button"] {
+    flex: 0 1 auto;
+  }
 }
 
 

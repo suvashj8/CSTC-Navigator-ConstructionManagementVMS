@@ -3,7 +3,8 @@ import { Input } from "@/components/ui/input";
 import { SearchableAutocomplete } from "@/components/ui/searchable-autocomplete";
 import { filterOptionsByQuery, filterRtaOfficesByQuery } from "@/data/nepalTransportOffices";
 import { VehicleDepartmentPicker } from "@/components/assets/VehicleDepartmentPicker";
-import { VEHICLE_MAKES, modelsForMake } from "@/data/vehicleCatalog";
+import { VehicleMakePicker } from "@/components/assets/VehicleMakePicker";
+import { modelsForMake } from "@/data/vehicleCatalog";
 import { useVehicleCategories } from "@/hooks/useVehicleCategories";
 import {
   defaultOperationModePick,
@@ -228,25 +229,16 @@ export function VehicleAssetFields({
   const set = <K extends keyof VehicleFieldState>(key: K, value: VehicleFieldState[K]) =>
     onChange({ ...vehicle, [key]: value });
 
-  const modelOptions = modelsForMake(
-    VEHICLE_MAKES.find((m) => m.toLowerCase() === vehicle.makeInput.trim().toLowerCase()) ??
-      vehicle.makeInput.trim()
-  );
+  const modelOptions = modelsForMake(vehicle.makeInput.trim());
 
   return (
     <>
-      <div className={field}>
-        <Label>Make</Label>
-        <SearchableAutocomplete
-          value={vehicle.makeInput}
-          onChange={(v) => onChange({ ...vehicle, makeInput: v, modelInput: "" })}
-          options={VEHICLE_MAKES}
-          placeholder={compact ? "" : "Type e.g. D for Daewoo, Datsun, Dodge…"}
-          filterFn={filterOptionsByQuery}
-          onPick={(v) => onChange({ ...vehicle, makeInput: v, modelInput: "" })}
-          required
-        />
-      </div>
+      <VehicleMakePicker
+        className={field}
+        value={vehicle.makeInput}
+        hideHint={compact}
+        onChange={(name) => onChange({ ...vehicle, makeInput: name, modelInput: "" })}
+      />
 
       <div className={field}>
         <Label>Model</Label>

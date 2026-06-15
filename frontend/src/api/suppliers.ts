@@ -6,14 +6,16 @@ const useMock = import.meta.env.VITE_USE_MOCK === "true";
 
 let mockSuppliers = [...MOCK_SUPPLIERS];
 
-export async function listSuppliers(params: { page?: number; per_page?: number; search?: string } = {}) {
+export async function listSuppliers(
+  params: { page?: number; per_page?: number; search?: string } = {}
+): Promise<Paginated<Supplier>> {
   if (useMock) {
     await delay();
     return paginate(mockSuppliers, params.page ?? 1, params.per_page ?? 10, params.search, (s, q) =>
       `${s.name} ${s.category}`.toLowerCase().includes(q)
     ) as Paginated<Supplier>;
   }
-  return unwrapPaginated(api.get("/api/v1/suppliers", { params }));
+  return unwrapPaginated<Supplier>(api.get("/api/v1/suppliers", { params }));
 }
 
 export async function createSupplier(body: {

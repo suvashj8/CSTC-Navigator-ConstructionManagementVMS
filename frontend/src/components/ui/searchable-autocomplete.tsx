@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { dismissOtherOverlays, useOverlayDismissListener } from "@/components/ui/overlay-portal-context";
 
 /** Marker for dialog outside-click guards (legacy portaled lists). */
 export const VMS_AUTOCOMPLETE_LIST_ATTR = "data-vms-autocomplete-list";
@@ -19,6 +20,7 @@ type Props = {
   onPick?: (value: string) => void;
   filterFn?: (options: readonly string[], query: string, limit: number) => string[];
   revealAllOnOpen?: boolean;
+  openOnFocus?: boolean;
 };
 
 export function SearchableAutocomplete({
@@ -34,8 +36,10 @@ export function SearchableAutocomplete({
   onPick,
   filterFn,
   revealAllOnOpen = false,
+  openOnFocus = true,
 }: Props) {
   const baseId = useId();
+  const overlaySourceId = useId();
   const listboxId = id ? `${id}-listbox` : `${baseId}-listbox`;
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +91,8 @@ export function SearchableAutocomplete({
     setRevealAll(false);
   }, []);
 
+  useOverlayDismissListener(overlaySourceId, close);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -108,6 +114,7 @@ export function SearchableAutocomplete({
   };
 
   const openList = () => {
+    dismissOtherOverlays(overlaySourceId);
     if (revealAllOnOpen) setRevealAll(true);
     updateOpenDirection();
     setOpen(true);
@@ -134,7 +141,9 @@ export function SearchableAutocomplete({
           onChange(e.target.value);
           setOpen(true);
         }}
-        onFocus={openList}
+        onFocus={() => {
+          if (openOnFocus) openList();
+        }}
         onKeyDown={(e) => {
           if (!showPanel && (e.key === "ArrowDown" || e.key === "Enter")) {
             openList();

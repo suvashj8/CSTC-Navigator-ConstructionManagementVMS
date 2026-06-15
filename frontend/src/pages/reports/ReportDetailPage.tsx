@@ -5,6 +5,9 @@ import { PageShell } from "@/components/layout/page-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MobileCard, MobileCardList } from "@/components/layout/mobile-card";
+import { ResponsiveTable } from "@/components/layout/responsive-table";
+import { TableScroll } from "@/components/layout/table-scroll";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useReportJob } from "@/hooks/useReportJob";
 import { reportDownloadPath } from "@/api/reports";
@@ -74,26 +77,50 @@ export default function ReportDetailPage() {
         <CardContent>
           {loading && !rows.length && <Skeleton className="h-40 w-full" />}
           {!loading && rows.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {Object.keys(rows[0]).map((k) => (
-                    <TableHead key={k} className="capitalize">
-                      {k.replace(/_/g, " ")}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row, i) => (
-                  <TableRow key={i}>
-                    {Object.keys(rows[0]).map((k) => (
-                      <TableCell key={k}>{String(row[k] ?? "")}</TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ResponsiveTable
+              mobile={
+                <MobileCardList>
+                  {rows.map((row, i) => {
+                    const keys = Object.keys(rows[0]);
+                    const titleKey = keys[0];
+                    return (
+                      <MobileCard
+                        key={i}
+                        title={String(row[titleKey] ?? `Row ${i + 1}`)}
+                        fields={keys.slice(1).map((k) => ({
+                          label: k.replace(/_/g, " "),
+                          value: String(row[k] ?? ""),
+                        }))}
+                      />
+                    );
+                  })}
+                </MobileCardList>
+              }
+              desktop={
+                <TableScroll>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {Object.keys(rows[0]).map((k) => (
+                          <TableHead key={k} className="capitalize">
+                            {k.replace(/_/g, " ")}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((row, i) => (
+                        <TableRow key={i}>
+                          {Object.keys(rows[0]).map((k) => (
+                            <TableCell key={k}>{String(row[k] ?? "")}</TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableScroll>
+              }
+            />
           )}
           {!loading && job?.status === "completed" && rows.length === 0 && (
             <p className="text-sm text-muted-foreground">No rows returned for this report.</p>

@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const assetStatusStyle: Record<AssetStatus, string> = {
+  available: "bg-emerald-100 text-emerald-800 border-emerald-200",
   active: "bg-emerald-100 text-emerald-800 border-emerald-200",
   in_repair: "bg-amber-100 text-amber-800 border-amber-200",
   in_transit: "bg-sky-100 text-sky-800 border-sky-200",

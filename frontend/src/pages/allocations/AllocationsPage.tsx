@@ -436,6 +436,7 @@ export default function AllocationsPage() {
                 onChange={(v) => setForm((f) => ({ ...f, from_location: v }))}
                 options={locationNames}
                 placeholder="Site or custom place"
+                openOnFocus={false}
                 required
               />
               <p className="text-xs text-muted-foreground">Registered site or type a custom origin</p>
@@ -447,6 +448,7 @@ export default function AllocationsPage() {
                 onChange={(v) => setForm((f) => ({ ...f, to_location: v }))}
                 options={locationNames}
                 placeholder="Site or custom place"
+                openOnFocus={false}
                 required
               />
               <p className="text-xs text-muted-foreground">Registered site or type a custom destination</p>

@@ -8,22 +8,21 @@ const SheetTrigger = SheetPrimitive.Trigger;
 const SheetClose = SheetPrimitive.Close;
 const SheetPortal = SheetPrimitive.Portal;
 
-const SheetOverlay = React.forwardRef<
-  React.ElementRef<typeof SheetPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+const SheetOverlay = ({ className, ref, ...props }: React.ComponentProps<typeof SheetPrimitive.Overlay>) => (
   <SheetPrimitive.Overlay
     className={cn("fixed inset-0 z-50 bg-black/60 backdrop-blur-sm", className)}
     {...props}
     ref={ref}
   />
-));
-SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
+);
 
-const SheetContent = React.forwardRef<
-  React.ElementRef<typeof SheetPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> & { side?: "top" | "bottom" | "left" | "right" }
->(({ side = "right", className, children, ...props }, ref) => (
+const SheetContent = ({
+  side = "right",
+  className,
+  children,
+  ref,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Content> & { side?: "top" | "bottom" | "left" | "right" }) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
@@ -43,7 +42,6 @@ const SheetContent = React.forwardRef<
       </SheetPrimitive.Close>
     </SheetPrimitive.Content>
   </SheetPortal>
-));
-SheetContent.displayName = SheetPrimitive.Content.displayName;
+);
 
 export { Sheet, SheetPortal, SheetOverlay, SheetTrigger, SheetClose, SheetContent };

@@ -61,6 +61,7 @@ import {
   isHourlyFromOperationPick,
   OPERATION_MODE_OTHER,
 } from "@/lib/operationModeCatalog";
+import { VEHICLE_MAKE_OTHER } from "@/lib/vehicleMakeCatalog";
 import { VEHICLE_CATEGORY_OTHER } from "@/lib/vehicleCategory";
 import { VEHICLE_DEPARTMENT_OTHER } from "@/lib/vehicleDepartment";
 
@@ -226,8 +227,12 @@ export default function AssetsPage() {
         toast.error("Choose Other to add a custom category, or pick an existing one");
         return;
       }
-      if (!resolved.make || !resolved.model) {
-        toast.error("Select or enter manufacturer and model");
+      if (!resolved.make || resolved.make === VEHICLE_MAKE_OTHER) {
+        toast.error("Select a manufacturer, or choose Custom Make to add a new one");
+        return;
+      }
+      if (!resolved.model) {
+        toast.error("Enter a model");
         return;
       }
       if (!resolved.department) {
@@ -373,13 +378,13 @@ export default function AssetsPage() {
                       actions={
                         <PermissionGate permission="manage_assets">
                           <>
-                            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openEdit(r)}>
+                            <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => openEdit(r)}>
                               <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-9 w-9 text-destructive"
+                              className="h-11 w-11 text-destructive"
                               onClick={() => setRemoveTarget(r)}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -633,7 +638,7 @@ export default function AssetsPage() {
               status &quot;Decommissioned&quot;. Delete permanently removes it from the system.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2">
+          <AlertDialogFooter>
             <AlertDialogCancel disabled={decommissionMut.isPending || permanentDeleteMut.isPending}>
               Cancel
             </AlertDialogCancel>

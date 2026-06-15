@@ -7,7 +7,7 @@ export function useReportJob() {
   const [job, setJob] = useState<ReportJob | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clear = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
