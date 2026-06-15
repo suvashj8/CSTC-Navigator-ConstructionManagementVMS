@@ -197,6 +197,12 @@ async function handleApiV1WithContext(
         const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
         if (roleErr) return withCors(roleErr, req);
         res = await createVehicleDepartment(req, pool);
+      } else if (method === "GET" && segments[0] === "vehicle-makes" && segments.length === 1) {
+        res = await listVehicleMakes(pool);
+      } else if (method === "POST" && segments[0] === "vehicle-makes" && segments.length === 1) {
+        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
+        if (roleErr) return withCors(roleErr, req);
+        res = await createVehicleMake(req, pool);
       } else if (method === "GET" && segments[0] === "operation-modes" && segments.length === 1) {
         res = await listOperationModes(pool);
       } else if (method === "POST" && segments[0] === "operation-modes" && segments.length === 1) {
@@ -907,6 +913,67 @@ async function createVehicleDepartment(req: NextRequest, pool: import("pg").Pool
     const msg = (e as Error).message;
     if (msg.includes("idx_vehicle_departments_name_lower")) {
       return badRequest("department name already exists");
+    }
+    throw e;
+  }
+}
+
+const BUILTIN_VEHICLE_MAKES = [
+  "Ashok Leyland",
+  "Bosch",
+  "Caterpillar",
+  "Daewoo",
+  "Daihatsu",
+  "Datsun",
+  "Dodge",
+  "Eicher",
+  "Ford",
+  "Hyundai",
+  "Isuzu",
+  "JCB",
+  "Komatsu",
+  "Mahindra",
+  "Makita",
+  "Suzuki",
+  "Tata",
+  "Toyota",
+  "Volvo",
+];
+
+async function listVehicleMakes(pool: import("pg").Pool) {
+  const res = await pool.query(
+    `SELECT make_id, name, description FROM vehicle_make_catalog ORDER BY name`
+  );
+  const list = res.rows.map((r) => ({
+    id: r.make_id,
+    name: r.name,
+    description: r.description ?? "",
+  }));
+  return ok(list);
+}
+
+async function createVehicleMake(req: NextRequest, pool: import("pg").Pool) {
+  const body = await req.json().catch(() => null);
+  const name = (body?.name ?? "").trim();
+  if (!name) return badRequest("name is required");
+  const reserved = BUILTIN_VEHICLE_MAKES.some((m) => m.toLowerCase() === name.toLowerCase());
+  if (reserved) return badRequest("name matches a built-in manufacturer");
+  try {
+    const ins = await pool.query(
+      `INSERT INTO vehicle_make_catalog (name, description) VALUES ($1, $2)
+       RETURNING make_id, name, description`,
+      [name, (body?.description ?? "").trim()]
+    );
+    const r = ins.rows[0];
+    return created({
+      id: r.make_id,
+      name: r.name,
+      description: r.description ?? "",
+    });
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes("idx_vehicle_make_catalog_name_lower")) {
+      return badRequest("manufacturer name already exists");
     }
     throw e;
   }
