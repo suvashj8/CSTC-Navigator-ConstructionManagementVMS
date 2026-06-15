@@ -10,10 +10,10 @@ import {
   notFound,
   ok,
   serviceUnavailable,
+  tooManyRequests,
   unauthorized,
 } from "../api-response";
-import { signImpersonation, signPlatform, signTenant } from "../auth";
-import { scanAllTenants } from "../expiry";
+import { signPlatform, signTenant } from "../auth";
 import { paginatedMeta, paginatedQuery } from "../pagination";
 import {
   exportDir,
@@ -24,6 +24,21 @@ import {
   rowsToJson,
 } from "../reports";
 import { corsHeaders, pageParams, platformContext, requireRoles, tenantContext } from "../request";
+import {
+  apiRateLimiter,
+  applyRateLimitHeaders,
+  authRateLimiter,
+} from "../rate-limiter";
+import {
+  clearRequestContext,
+  createRequestContext,
+  getRequestContext,
+  logError,
+  logRequest,
+  logResponse,
+  runWithRequestContext,
+  withRequestId,
+} from "../request-context";
 import { getTenantManager } from "../tenant-manager";
 import {
   derefStr,
@@ -51,6 +66,7 @@ import {
   scanAllocationRow,
   scanAssetRow,
 } from "./entities";
+import { handlePlatformRoutes } from "./platform";
 
 type RouteContext = { params: Promise<{ path?: string[] }> };
 
@@ -59,7 +75,21 @@ function withCors(res: Response, req: NextRequest): Response {
   for (const [k, v] of Object.entries(headers)) {
     res.headers.set(k, v);
   }
+  const requestContext = getRequestContext();
+  if (requestContext) {
+    withRequestId(res, requestContext.requestId);
+  }
   return res;
+}
+
+function finalizeApiResponse(res: Response, req: NextRequest, requestId: string): Response {
+  return withRequestId(withCors(res, req), requestId);
+}
+
+function isAuthRoute(method: string, segments: string[]): boolean {
+  if (method !== "POST") return false;
+  const path = segments.join("/");
+  return path === "auth/login" || path === "platform/auth/login";
 }
 
 function matchPath(segments: string[], pattern: string[]): boolean {
@@ -76,15 +106,39 @@ function extractParams(pattern: string[], segments: string[]): Record<string, st
 }
 
 export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<Response> {
+  const requestContext = createRequestContext(req);
+  return runWithRequestContext(requestContext, () => handleApiV1WithContext(req, ctx, requestContext));
+}
+
+async function handleApiV1WithContext(
+  req: NextRequest,
+  ctx: RouteContext,
+  requestContext: ReturnType<typeof createRequestContext>
+): Promise<Response> {
   if (req.method === "OPTIONS") {
-    return new NextResponse(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
+    const res = new NextResponse(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
+    logResponse(req, res.status, Date.now() - requestContext.startTime, { route: "OPTIONS" });
+    clearRequestContext();
+    return withRequestId(res, requestContext.requestId);
   }
 
   const { path: pathSegments } = await ctx.params;
   const segments = pathSegments ?? [];
   const method = req.method;
+  const route = segments.join("/") || "/";
 
   try {
+    logRequest(req, "api request", { route });
+
+    const limiter = isAuthRoute(method, segments) ? authRateLimiter : apiRateLimiter;
+    const rateLimit = await limiter(req);
+    if (!rateLimit.allowed) {
+      const res = tooManyRequests("rate limit exceeded");
+      applyRateLimitHeaders(res, rateLimit);
+      logResponse(req, res.status, Date.now() - requestContext.startTime, { route, rateLimited: true });
+      return finalizeApiResponse(res, req, requestContext.requestId);
+    }
+
     let res: Response;
 
     // --- Public auth ---
@@ -97,23 +151,7 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
     else if (segments[0] === "platform") {
       const plat = await platformContext(req);
       if ("error" in plat) return withCors(plat.error, req);
-      const rest = segments.slice(1);
-
-      if (method === "GET" && rest.join("/") === "tenants") {
-        res = await listTenants(plat.tm);
-      } else if (method === "POST" && rest.join("/") === "tenants") {
-        res = await createTenant(req, plat.tm);
-      } else if (method === "PUT" && matchPath(rest, ["tenants", ":id", "status"])) {
-        const p = extractParams(["tenants", ":id", "status"], rest);
-        res = await updateTenantStatus(req, plat.tm, p.id);
-      } else if (method === "POST" && matchPath(rest, ["tenants", ":id", "switch"])) {
-        const p = extractParams(["tenants", ":id", "switch"], rest);
-        res = await switchTenant(req, plat, p.id);
-      } else if (method === "POST" && rest.join("/") === "jobs/expiry-scan") {
-        res = await triggerExpiryScan(plat.tm);
-      } else {
-        return withCors(notFound("route not found"), req);
-      }
+      res = await handlePlatformRoutes(req, segments, method, plat);
     }
     // --- Tenant routes ---
     else {
@@ -128,11 +166,11 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
         res = await listAssets(req, pool, p);
       } else if (method === "POST" && segments[0] === "assets" && segments.length === 1) {
         const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
+        if (roleErr) return finalizeApiResponse(roleErr, req, requestContext.requestId);
         res = await createAsset(req, pool);
       } else if (method === "PUT" && matchPath(segments, ["assets", ":id"])) {
         const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
+        if (roleErr) return finalizeApiResponse(roleErr, req, requestContext.requestId);
         res = await updateAsset(req, pool, extractParams(["assets", ":id"], segments).id);
       } else if (method === "DELETE" && matchPath(segments, ["assets", ":id"])) {
         const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
@@ -306,9 +344,17 @@ export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<
       }
     }
 
-    return withCors(res, req);
+    applyRateLimitHeaders(res, rateLimit);
+    logResponse(req, res.status, Date.now() - requestContext.startTime, { route });
+    return finalizeApiResponse(res, req, requestContext.requestId);
   } catch (e) {
-    return withCors(internal((e as Error).message), req);
+    const error = e as Error;
+    logError(req, error, { route });
+    const res = internal(error.message);
+    logResponse(req, res.status, Date.now() - requestContext.startTime, { route, error: true });
+    return finalizeApiResponse(res, req, requestContext.requestId);
+  } finally {
+    clearRequestContext();
   }
 }
 
@@ -441,70 +487,6 @@ async function platformLogin(req: NextRequest) {
     }
     return unauthorized("invalid credentials");
   }
-}
-
-// --- Platform handlers ---
-
-async function listTenants(tm: ReturnType<typeof getTenantManager>) {
-  const res = await tm.main().query(
-    `SELECT tenant_id, name, subdomain, db_name, plan_tier, status, created_at FROM tenants ORDER BY created_at DESC`
-  );
-  const list = res.rows.map((r) => ({
-    id: r.tenant_id,
-    name: r.name,
-    subdomain: r.subdomain,
-    db_name: r.db_name,
-    plan_tier: r.plan_tier,
-    status: r.status,
-    created_at: r.created_at,
-  }));
-  return ok(list);
-}
-
-async function createTenant(req: NextRequest, tm: ReturnType<typeof getTenantManager>) {
-  const body = await req.json().catch(() => null);
-  if (!body) return badRequest("invalid body");
-  const id = await tm.provision(body.name, body.subdomain, body.admin_email, body.admin_password, body.admin_name);
-  return created({ tenantId: id, subdomain: body.subdomain });
-}
-
-async function updateTenantStatus(req: NextRequest, tm: ReturnType<typeof getTenantManager>, id: string) {
-  const body = await req.json().catch(() => null);
-  if (!body?.status) return badRequest("invalid body");
-  await tm.main().query(`UPDATE tenants SET status = $1 WHERE tenant_id = $2`, [body.status, id]);
-  return ok({ tenant_id: id, status: body.status });
-}
-
-async function switchTenant(
-  req: NextRequest,
-  plat: { claims: { sub: string }; tm: ReturnType<typeof getTenantManager> },
-  tenantId: string
-) {
-  const info = await plat.tm.byId(tenantId).catch(() => null);
-  if (!info) return notFound("tenant not found");
-  const pool = await plat.tm.pool(tenantId);
-  const res = await pool.query(
-    `SELECT user_id, name, email, role::text, location_ids FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1`
-  );
-  const row = res.rows[0];
-  if (!row) return notFound("tenant admin not found");
-  const locIds = (row.location_ids as string[] | null)?.map(String) ?? [];
-  const user = {
-    id: row.user_id,
-    name: row.name,
-    email: row.email,
-    role: row.role,
-    location_ids: locIds,
-    tenant_id: tenantId,
-    tenant_name: info.name,
-  };
-  const login = await signImpersonation(plat.claims.sub, user);
-  return ok(login);
-}
-
-async function triggerExpiryScan(tm: ReturnType<typeof getTenantManager>) {
-  await scanAllTenants(tm);
-  return ok({ queued: true });
 }
 
 // --- Tenant handlers ---

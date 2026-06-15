@@ -29,6 +29,13 @@ export function unauthorized(message = "unauthorized") {
   );
 }
 
+export function tooManyRequests(message = "too many requests") {
+  return NextResponse.json(
+    { success: false, error: { code: "RATE_LIMITED", message } },
+    { status: 429 }
+  );
+}
+
 export function forbidden() {
   return NextResponse.json(
     { success: false, error: { code: "INSUFFICIENT_PERMISSIONS", message: "insufficient permissions" } },
@@ -50,9 +57,21 @@ export function notFound(message: string) {
   );
 }
 
-export function serviceUnavailable(message: string) {
+export function serviceUnavailable(message: string | Record<string, unknown>) {
+  if (typeof message === "string") {
+    return NextResponse.json(
+      { success: false, error: { code: "SERVICE_UNAVAILABLE", message } },
+      { status: 503 }
+    );
+  }
+  const hint =
+    typeof message.hint === "string"
+      ? message.hint
+      : typeof message.status === "string"
+        ? `service ${message.status}`
+        : "service unavailable";
   return NextResponse.json(
-    { success: false, error: { code: "SERVICE_UNAVAILABLE", message } },
+    { success: false, error: { code: "SERVICE_UNAVAILABLE", message: hint }, data: message },
     { status: 503 }
   );
 }
