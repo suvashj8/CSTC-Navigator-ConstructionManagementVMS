@@ -33,12 +33,10 @@ import {
   clearRequestContext,
   createRequestContext,
   getRequestContext,
-  logError,
-  logRequest,
-  logResponse,
   runWithRequestContext,
   withRequestId,
 } from "../request-context";
+import { logError, logRequest, logResponse } from "../logger";
 import { getTenantManager } from "../tenant-manager";
 import {
   derefStr,
@@ -67,6 +65,11 @@ import {
   scanAssetRow,
 } from "./entities";
 import { handlePlatformRoutes } from "./platform";
+import { assetsRouteEntries } from "./routes/assets";
+import { allocationsRouteEntries } from "./routes/allocations";
+import { catalogRouteEntries } from "./routes/catalogs";
+import { locationsRouteEntries } from "./routes/locations";
+import { authRouteEntries } from "./routes/auth";
 
 type RouteContext = { params: Promise<{ path?: string[] }> };
 
@@ -103,6 +106,40 @@ function extractParams(pattern: string[], segments: string[]): Record<string, st
     if (p.startsWith(":")) out[p.slice(1)] = segments[i];
   });
   return out;
+}
+
+type TenantRouteHandlerContext = {
+  req: NextRequest;
+  pool: import("pg").Pool;
+  claims: { sub: string } & Record<string, unknown>;
+  tenantId: string;
+  p: ReturnType<typeof pageParams>;
+  segments: string[];
+  method: string;
+  params: Record<string, string>;
+  // request-id + cors are handled outside in the request lifecycle
+};
+
+type TenantRouteEntry = {
+  method: string;
+  pattern: string[];
+  roles?: string[];
+  // if true, unauthorized/forbidden should behave like current code in this file:
+  // some branches used withCors(roleErr, req), others used finalizeApiResponse(roleErr,...)
+  // We preserve those decisions by selecting the return function explicitly.
+  roleErrorMode: "finalize";
+  handler: (ctx: TenantRouteHandlerContext) => Promise<Response>;
+};
+
+function matchTenantRoute(
+  method: string,
+  reqMethod: string,
+  segments: string[],
+  pattern: string[]
+): Record<string, string> | null {
+  if (reqMethod !== method) return null;
+  if (!matchPath(segments, pattern)) return null;
+  return extractParams(pattern, segments);
 }
 
 export async function handleApiV1(req: NextRequest, ctx: RouteContext): Promise<Response> {
@@ -160,194 +197,28 @@ async function handleApiV1WithContext(
       const { pool, claims, tenantId } = tctx;
       const p = pageParams(req);
 
-      if (method === "GET" && segments.join("/") === "dashboard/stats") {
-        res = await dashboardStats(pool);
-      } else if (method === "GET" && segments[0] === "assets" && segments.length === 1) {
-        res = await listAssets(req, pool, p);
-      } else if (method === "POST" && segments[0] === "assets" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return finalizeApiResponse(roleErr, req, requestContext.requestId);
-        res = await createAsset(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["assets", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return finalizeApiResponse(roleErr, req, requestContext.requestId);
-        res = await updateAsset(req, pool, extractParams(["assets", ":id"], segments).id);
-      } else if (method === "DELETE" && matchPath(segments, ["assets", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        const assetId = extractParams(["assets", ":id"], segments).id;
-        const permanent = req.nextUrl.searchParams.get("permanent") === "true";
-        res = permanent ? await permanentlyDeleteAsset(pool, assetId) : await decommissionAsset(pool, assetId);
-      } else if (method === "GET" && segments[0] === "allocations" && segments.length === 1) {
-        res = await listAllocations(req, pool, p);
-      } else if (method === "POST" && segments[0] === "allocations" && segments.length === 1) {
-        res = await createAllocation(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["allocations", ":id", ":action"])) {
-        const params = extractParams(["allocations", ":id", ":action"], segments);
-        res = await transitionAllocation(pool, params.id, params.action);
-      } else if (method === "GET" && segments[0] === "vehicle-categories" && segments.length === 1) {
-        res = await listVehicleCategories(pool);
-      } else if (method === "POST" && segments[0] === "vehicle-categories" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createVehicleCategory(req, pool);
-      } else if (method === "GET" && segments[0] === "vehicle-departments" && segments.length === 1) {
-        res = await listVehicleDepartments(pool);
-      } else if (method === "POST" && segments[0] === "vehicle-departments" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createVehicleDepartment(req, pool);
-      } else if (method === "GET" && segments[0] === "vehicle-makes" && segments.length === 1) {
-        res = await listVehicleMakes(pool);
-      } else if (method === "POST" && segments[0] === "vehicle-makes" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createVehicleMake(req, pool);
-      } else if (method === "GET" && segments[0] === "operation-modes" && segments.length === 1) {
-        res = await listOperationModes(pool);
-      } else if (method === "POST" && segments[0] === "operation-modes" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createOperationMode(req, pool);
-      } else if (method === "GET" && segments[0] === "asset-types" && segments.length === 1) {
-        res = await listAssetTypes(pool);
-      } else if (method === "POST" && segments[0] === "asset-types" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createAssetType(req, pool);
-      } else if (method === "GET" && segments[0] === "ownership-types" && segments.length === 1) {
-        res = await listOwnershipTypes(pool);
-      } else if (method === "POST" && segments[0] === "ownership-types" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createOwnershipType(req, pool);
-      } else if (method === "GET" && segments[0] === "maintenance-statuses" && segments.length === 1) {
-        res = await listMaintenanceStatuses(pool);
-      } else if (method === "POST" && segments[0] === "maintenance-statuses" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createMaintenanceStatus(req, pool);
-      } else if (method === "GET" && segments[0] === "supplier-categories" && segments.length === 1) {
-        res = await listSupplierCategories(pool);
-      } else if (method === "POST" && segments[0] === "supplier-categories" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createSupplierCategory(req, pool);
-      } else if (method === "GET" && segments[0] === "location-types" && segments.length === 1) {
-        res = await listLocationTypes(pool);
-      } else if (method === "POST" && segments[0] === "location-types" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createLocationType(req, pool);
-      } else if (method === "GET" && segments[0] === "insurance-statuses" && segments.length === 1) {
-        res = await listInsuranceStatuses(pool);
-      } else if (method === "POST" && segments[0] === "insurance-statuses" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createInsuranceStatus(req, pool);
-      } else if (method === "GET" && segments[0] === "insurance-coverage-types" && segments.length === 1) {
-        res = await listInsuranceCoverageTypes(pool);
-      } else if (method === "POST" && segments[0] === "insurance-coverage-types" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createInsuranceCoverageType(req, pool);
-      } else if (method === "GET" && segments[0] === "locations" && segments.length === 1) {
-        res = await listLocations(pool);
-      } else if (method === "POST" && segments[0] === "locations" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createLocation(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["locations", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await updateLocation(req, pool, extractParams(["locations", ":id"], segments).id);
-      } else if (method === "GET" && segments[0] === "users" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin");
-        if (roleErr) return withCors(roleErr, req);
-        res = await listUsers(req, pool, p);
-      } else if (method === "POST" && segments[0] === "users" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createUser(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["users", ":id"])) {
-        const roleErr = requireRoles(claims, "admin");
-        if (roleErr) return withCors(roleErr, req);
-        res = await updateUser(req, pool, extractParams(["users", ":id"], segments).id);
-      } else if (method === "GET" && segments[0] === "drivers" && segments.length === 1) {
-        res = await listDrivers(req, pool, p);
-      } else if (method === "POST" && segments[0] === "drivers" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createDriver(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["drivers", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await updateDriver(req, pool, extractParams(["drivers", ":id"], segments).id);
-      } else if (method === "GET" && segments[0] === "insurance" && segments.length === 1) {
-        res = await listInsurance(pool, p);
-      } else if (method === "POST" && segments[0] === "insurance" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createInsurance(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["insurance", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await updateInsurance(req, pool, extractParams(["insurance", ":id"], segments).id);
-      } else if (method === "GET" && segments[0] === "suppliers" && segments.length === 1) {
-        res = await listSuppliers(pool, p);
-      } else if (method === "POST" && segments[0] === "suppliers" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createSupplier(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["suppliers", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await updateSupplier(req, pool, extractParams(["suppliers", ":id"], segments).id);
-      } else if (method === "GET" && segments[0] === "fuel-logs" && segments.length === 1) {
-        res = await listFuelLogs(req, pool, p);
-      } else if (method === "POST" && segments[0] === "fuel-logs" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager", "supervisor");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createFuelLog(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["fuel-logs", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await updateFuelLog(req, pool, extractParams(["fuel-logs", ":id"], segments).id);
-      } else if (method === "DELETE" && matchPath(segments, ["fuel-logs", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await deleteFuelLog(pool, extractParams(["fuel-logs", ":id"], segments).id);
-      } else if (method === "GET" && segments[0] === "maintenance" && segments.length === 1) {
-        res = await listMaintenance(req, pool, p);
-      } else if (method === "POST" && segments[0] === "maintenance" && segments.length === 1) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await createMaintenance(req, pool);
-      } else if (method === "PUT" && matchPath(segments, ["maintenance", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await updateMaintenance(req, pool, extractParams(["maintenance", ":id"], segments).id);
-      } else if (method === "DELETE" && matchPath(segments, ["maintenance", ":id"])) {
-        const roleErr = requireRoles(claims, "admin", "manager");
-        if (roleErr) return withCors(roleErr, req);
-        res = await deleteMaintenance(pool, extractParams(["maintenance", ":id"], segments).id);
-      } else if (method === "GET" && segments[0] === "notifications" && segments.length === 1) {
-        res = await listNotifications(pool, claims.sub);
-      } else if (method === "PUT" && matchPath(segments, ["notifications", ":id", "read"])) {
-        res = await markNotificationRead(pool, extractParams(["notifications", ":id", "read"], segments).id);
-      } else if (method === "POST" && segments.join("/") === "notifications/mark-read") {
-        res = await markNotificationsReadBulk(req, pool, claims.sub);
-      } else if (method === "GET" && segments.join("/") === "reports/jobs") {
-        res = await listReportJobs(pool, claims.sub);
-      } else if (method === "POST" && segments.join("/") === "reports/jobs") {
-        res = await createReportJob(req, pool, tenantId, claims.sub);
-      } else if (method === "GET" && matchPath(segments, ["reports", "jobs", ":id"])) {
-        res = await getReportJob(pool, extractParams(["reports", "jobs", ":id"], segments).id);
-      } else if (method === "GET" && matchPath(segments, ["reports", "jobs", ":id", "download"])) {
-        res = await downloadReport(pool, extractParams(["reports", "jobs", ":id", "download"], segments).id);
-      } else {
-        return withCors(notFound("route not found"), req);
+      const tenantRoutes: TenantRouteEntry[] = [
+        { method: "GET", pattern: ["dashboard", "stats"], roleErrorMode: "finalize", handler: async () => dashboardStats(pool) },
+        ...assetsRouteEntries,
+        ...allocationsRouteEntries,
+        ...catalogRouteEntries,
+        ...locationsRouteEntries,
+        ...authRouteEntries,
+      ];
+
+      const matched = tenantRoutes.find((r) => r.method === method && matchPath(segments, r.pattern));
+      if (!matched) return withCors(notFound("route not found"), req);
+
+      if (matched.roles) {
+        const roleErr = requireRoles(claims, ...matched.roles);
+        if (roleErr) {
+          return finalizeApiResponse(roleErr, req, requestContext.requestId);
+        }
       }
+
+      const params = extractParams(matched.pattern, segments);
+      const ctx: TenantRouteHandlerContext = { req, pool, claims, tenantId, p, segments, method, params };
+      res = await matched.handler(ctx);
     }
 
     applyRateLimitHeaders(res, rateLimit);
@@ -375,7 +246,7 @@ type TenantUserRow = {
   location_ids: string[] | null;
 };
 
-async function lookupActiveTenantUser(pool: import("pg").Pool, email: string): Promise<TenantUserRow | null> {
+export async function lookupActiveTenantUser(pool: import("pg").Pool, email: string): Promise<TenantUserRow | null> {
   const res = await pool.query(
     `SELECT user_id, name, email, role::text, password_hash, location_ids
      FROM users WHERE email = $1 AND status = 'active'`,
@@ -384,7 +255,7 @@ async function lookupActiveTenantUser(pool: import("pg").Pool, email: string): P
   return (res.rows[0] as TenantUserRow | undefined) ?? null;
 }
 
-async function verifyTenantPassword(row: TenantUserRow | null, password: string): Promise<boolean> {
+export async function verifyTenantPassword(row: TenantUserRow | null, password: string): Promise<boolean> {
   if (!row?.password_hash) return false;
   return bcrypt.compare(password, row.password_hash);
 }
@@ -431,16 +302,16 @@ async function tenantLogin(req: NextRequest) {
     }
     const msg = (e as Error).message ?? "";
     if (isInfrastructureError(msg)) {
-      return serviceUnavailable("database not reachable â€” start Docker, then run npm run dev:full:host from project root");
+      return serviceUnavailable("database not reachable - start Docker, then run npm run dev:full:host from project root");
     }
     if (isDemo && msg) {
-      return serviceUnavailable(`demo setup failed â€” run npm run seed (${msg})`);
+      return serviceUnavailable(`demo setup failed - run npm run seed (${msg})`);
     }
     return unauthorized("invalid tenant or credentials");
   }
 }
 
-function isInfrastructureError(msg: string): boolean {
+export function isInfrastructureError(msg: string): boolean {
   const lower = msg.toLowerCase();
   return (
     msg.includes("ECONNREFUSED") ||
@@ -489,7 +360,7 @@ async function platformLogin(req: NextRequest) {
     }
     const msg = (e as Error).message ?? "";
     if (isInfrastructureError(msg)) {
-      return serviceUnavailable("database not reachable â€” start Docker, then run npm run dev:full:host from project root");
+      return serviceUnavailable("database not reachable - start Docker, then run npm run dev:full:host from project root");
     }
     return unauthorized("invalid credentials");
   }
@@ -644,7 +515,7 @@ async function listAllocations(req: NextRequest, pool: import("pg").Pool, p: Ret
     where = ` WHERE al.state = $${args.length}`;
   }
   const from = ` FROM allocations al JOIN assets a ON a.asset_id = al.asset_id JOIN work_locations fl ON fl.location_id = al.from_location_id JOIN work_locations tl ON tl.location_id = al.to_location_id LEFT JOIN users d ON d.user_id = al.driver_id LEFT JOIN users recv ON recv.user_id = al.receiver_user_id`;
-  const dataSQL = `SELECT al.alloc_id, al.group_id, al.asset_id, a.reg_serial_no || ' â€” ' || a.make || ' ' || a.model AS asset_label,
+  const dataSQL = `SELECT al.alloc_id, al.group_id, al.asset_id, a.reg_serial_no || ' - ' || a.make || ' ' || a.model AS asset_label,
     al.from_location_id, fl.name AS from_location_name, al.to_location_id, tl.name AS to_location_name,
     al.driver_id, COALESCE(d.name, al.external_driver_name) AS driver_name,
     al.receiver_user_id, al.receiver_role, COALESCE(recv.name, al.receiver_name) AS receiver_name,
@@ -718,42 +589,52 @@ async function createAllocation(req: NextRequest, pool: import("pg").Pool) {
   const groupId = randomUUID();
   const createdIds: string[] = [];
 
-  for (const assetId of assetIds) {
-    const res = await pool.query(
-      `INSERT INTO allocations (
-         asset_id, from_location_id, to_location_id, driver_id,
-         external_driver_name, external_driver_contact,
-         receiver_user_id, receiver_role, receiver_name, receiver_contact,
-         group_id, start_date, expected_return
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING alloc_id`,
-      [
-        assetId,
-        fromLocationId,
-        toLocationId,
-        driverId,
-        driverId ? null : externalDriverName || null,
-        driverId ? null : externalDriverContact || null,
-        receiverRole === "other" ? null : receiverUserId,
-        receiverRole,
-        receiverRole === "other" ? receiverName : null,
-        receiverRole === "other" ? receiverContact : null,
-        groupId,
-        body.start_date,
-        body.expected_return,
-      ]
-    );
-    createdIds.push(res.rows[0].alloc_id);
-  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const assetId of assetIds) {
+      const res = await client.query(
+        `INSERT INTO allocations (
+           asset_id, from_location_id, to_location_id, driver_id,
+           external_driver_name, external_driver_contact,
+           receiver_user_id, receiver_role, receiver_name, receiver_contact,
+           group_id, start_date, expected_return
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING alloc_id`,
+        [
+          assetId,
+          fromLocationId,
+          toLocationId,
+          driverId,
+          driverId ? null : externalDriverName || null,
+          driverId ? null : externalDriverContact || null,
+          receiverRole === "other" ? null : receiverUserId,
+          receiverRole,
+          receiverRole === "other" ? receiverName : null,
+          receiverRole === "other" ? receiverContact : null,
+          groupId,
+          body.start_date,
+          body.expected_return,
+        ]
+      );
+      createdIds.push(res.rows[0].alloc_id);
+    }
 
-  if (receiverUserId && receiverRole !== "other") {
-    const assetCount = assetIds.length;
-    const title = assetCount > 1 ? `Allocation: ${assetCount} assets incoming` : "Allocation: asset incoming";
-    const message = `You are listed as receiving authority for a transfer request. Review allocations when assets arrive.`;
-    await pool.query(
-      `INSERT INTO notifications (recipient_id, type, title, message, channel, status, sent_at)
-       VALUES ($1, 'allocation', $2, $3, 'in_app', 'sent', NOW())`,
-      [receiverUserId, title, message]
-    );
+    if (receiverUserId && receiverRole !== "other") {
+      const assetCount = assetIds.length;
+      const title = assetCount > 1 ? `Allocation: ${assetCount} assets incoming` : "Allocation: asset incoming";
+      const message = `You are listed as receiving authority for a transfer request. Review allocations when assets arrive.`;
+      await client.query(
+        `INSERT INTO notifications (recipient_id, type, title, message, channel, status, sent_at)
+         VALUES ($1, 'allocation', $2, $3, 'in_app', 'sent', NOW())`,
+        [receiverUserId, title, message]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
   }
 
   const alloc = await fetchAllocation(pool, createdIds[0]);
@@ -1737,19 +1618,44 @@ async function markNotificationsReadBulk(req: NextRequest, pool: import("pg").Po
 async function createReportJob(req: NextRequest, pool: import("pg").Pool, tenantId: string, userId: string) {
   const body = await req.json().catch(() => null);
   if (!body?.report_type) return badRequest("invalid body");
+
+  // Validate report type early so unknown/typo values don't silently generate empty exports.
+  const allowedReportTypes = [
+    "location-assets",
+    "insurance-expiry",
+    "driver-license-expiry",
+    "fleet-utilization",
+    "overdue-allocations",
+  ] as const;
+  if (!allowedReportTypes.includes(body.report_type)) {
+    return badRequest(`invalid report_type: ${body.report_type}`);
+  }
+
   const exportFormat = body.export_format || "json";
-  const params = body.params ? JSON.stringify(body.params) : "{}";
-  const h = hashParams(body.report_type, exportFormat, params);
+  if (!["json", "pdf", "xlsx"].includes(exportFormat)) {
+    return badRequest(`invalid export_format: ${exportFormat}`);
+  }
+  let paramsStr = "{}";
+  if (body.params) {
+    if (typeof body.params !== "object" || Array.isArray(body.params)) {
+      return badRequest("params must be a valid JSON object");
+    }
+    paramsStr = JSON.stringify(body.params);
+  }
+
+  const h = hashParams(body.report_type, exportFormat, paramsStr);
   const cached = await findCachedJob(pool, h);
   if (cached) return getReportJob(pool, cached);
 
   const ins = await pool.query(
     `INSERT INTO report_jobs (report_type, export_format, params, params_hash, requested_by, status)
      VALUES ($1,$2,$3,$4,$5,'pending') RETURNING job_id`,
-    [body.report_type, exportFormat, params, h, userId]
+    [body.report_type, exportFormat, paramsStr, h, userId]
   );
   const jobId = ins.rows[0].job_id;
-  await runReportSync(pool, jobId, body.report_type, exportFormat);
+  runReportSync(pool, jobId, body.report_type, exportFormat).catch(e => {
+    console.error("[createReportJob async error]", e);
+  });
   return getReportJob(pool, jobId);
 }
 
@@ -1842,7 +1748,7 @@ async function downloadReport(pool: import("pg").Pool, id: string) {
     return new NextResponse(buf, {
       headers: {
         "Content-Type": mime,
-        "Content-Disposition": `attachment; filename=${r.file_name}`,
+        "Content-Disposition": `attachment; filename="${r.file_name}"`,
       },
     });
   } catch {

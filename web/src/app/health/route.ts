@@ -28,7 +28,7 @@ async function checkRedis(addr: string): Promise<string> {
   }
 }
 
-export async function GET() {
+async function runHealthChecks(): Promise<{ body: Record<string, unknown>; postgresOk: boolean }> {
   const checks: Record<string, string> = {};
   const warnings: string[] = [];
   let postgresOk = false;
@@ -104,8 +104,21 @@ export async function GET() {
       : "Database not ready — run: npm run dev (stops conflicting Docker API and starts DB + API + UI)",
   };
 
+  return { body, postgresOk };
+}
+
+export async function GET() {
+  const { body, postgresOk } = await runHealthChecks();
   if (!postgresOk) {
     return serviceUnavailable(body);
   }
   return ok(body);
+}
+
+export async function HEAD() {
+  const { postgresOk } = await runHealthChecks();
+  return new Response(null, {
+    status: postgresOk ? 200 : 503,
+    headers: { "Content-Type": "application/json" },
+  });
 }

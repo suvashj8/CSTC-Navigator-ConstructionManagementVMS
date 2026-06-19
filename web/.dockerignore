@@ -4,9 +4,10 @@ node_modules
 .pnp.js
 
 # Build outputs
+.next
+out
 dist
 build
-*.local
 
 # IDE
 .idea
@@ -53,7 +54,3 @@ docker-compose*.yml
 
 # TypeScript
 *.tsbuildinfo
-
-# Capacitor
-android
-ios

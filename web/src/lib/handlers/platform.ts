@@ -54,7 +54,12 @@ async function listTenants(tm: ReturnType<typeof getTenantManager>) {
 
 async function createTenant(req: NextRequest, tm: ReturnType<typeof getTenantManager>) {
   const body = await req.json().catch(() => null);
-  if (!body) return badRequest("invalid body");
+  if (!body || !body.subdomain) return badRequest("invalid body");
+  
+  if (!/^[a-z0-9-]+$/.test(body.subdomain)) {
+    return badRequest("invalid subdomain format. Only lowercase letters, numbers, and hyphens are allowed.");
+  }
+
   const id = await tm.provision(body.name, body.subdomain, body.admin_email, body.admin_password, body.admin_name);
   return created({ tenantId: id, subdomain: body.subdomain });
 }

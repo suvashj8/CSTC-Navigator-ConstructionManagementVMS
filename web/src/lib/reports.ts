@@ -200,5 +200,9 @@ export async function findCachedJob(pool: Pool, hash: string): Promise<string | 
 }
 
 export function exportDir(): string {
-  return process.env.EXPORT_DIR ?? path.join(process.cwd(), "exports");
+  const dir = process.env.EXPORT_DIR ?? path.join(process.cwd(), "exports");
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
 }

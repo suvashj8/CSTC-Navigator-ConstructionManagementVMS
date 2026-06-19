@@ -5,6 +5,8 @@ export type ApiMeta = {
   page?: number;
   per_page?: number;
   total_pages?: number;
+  next_cursor?: string | null;
+  has_more?: boolean;
 };
 
 export function ok<T>(data: T, meta?: ApiMeta) {

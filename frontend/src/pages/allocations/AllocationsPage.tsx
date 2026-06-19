@@ -148,7 +148,7 @@ export default function AllocationsPage() {
     onSuccess: (result) => {
       const n = result.affected_count ?? 1;
       toast.success(n > 1 ? `Updated ${n} allocations in this request` : "Allocation updated");
-      qc.invalidateQueries({ queryKey: ["allocations"] });
+      qc.invalidateQueries({ queryKey: ["allocations"], exact: false });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -158,7 +158,7 @@ export default function AllocationsPage() {
     mutationFn: createAllocation,
     onSuccess: () => {
       toast.success("Allocation request created");
-      qc.invalidateQueries({ queryKey: ["allocations"] });
+      qc.invalidateQueries({ queryKey: ["allocations"], exact: false });
       qc.invalidateQueries({ queryKey: ["locations"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setOpen(false);

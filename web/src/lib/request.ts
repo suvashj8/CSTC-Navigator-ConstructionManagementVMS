@@ -71,8 +71,6 @@ export function corsHeaders(origin: string | null): HeadersInit {
     (process.env.NODE_ENV === "development" || process.env.VMS_ALLOW_LAN_CORS === "true");
   if (origin && (allowed.includes(origin) || lanOk)) {
     headers["Access-Control-Allow-Origin"] = origin;
-  } else if (!origin) {
-    headers["Access-Control-Allow-Origin"] = "*";
   }
   return headers;
 }
