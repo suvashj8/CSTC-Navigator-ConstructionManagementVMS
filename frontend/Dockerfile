@@ -43,18 +43,8 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 # Copy built assets
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Create non-root user for nginx
-RUN addgroup --system --gid 101 nginx \
-    && adduser --system --uid 101 --ingroup nginx nginx
-
-# Set permissions
-RUN chown -R nginx:nginx /usr/share/nginx/html \
-    && chown -R nginx:nginx /var/cache/nginx \
-    && chown -R nginx:nginx /var/log/nginx \
-    && chown -R nginx:nginx /etc/nginx/conf.d
-
-# Switch to non-root user
-USER nginx
+# Official nginx:alpine image already ships nginx user/group (uid/gid 101)
+RUN chown -R nginx:nginx /usr/share/nginx/html
 
 EXPOSE 80
 
