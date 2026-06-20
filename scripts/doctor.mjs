@@ -1,7 +1,7 @@
 import net from "node:net";
 import { execSync } from "node:child_process";
 
-const VMS_PORT = Number(process.env.MAIN_DB_PORT ?? 7002);
+const VMS_PORT = Number(process.env.MAIN_DB_PORT ?? 5432);
 const VMS_USER = process.env.MAIN_DB_USER ?? "vms";
 const VMS_PASS = process.env.MAIN_DB_PASSWORD ?? "vms";
 const VMS_DB = process.env.MAIN_DB_NAME ?? "vms_main";
@@ -38,12 +38,10 @@ async function main() {
     console.log("Docker:           engine NOT responding — quit Docker Desktop fully, reopen, wait for Engine running");
   }
 
-  const p5432 = await probe("localhost", 5432);
-  const p5434 = await probe("localhost", VMS_PORT);
-  console.log(`Port 5432:        ${p5432 ? "in use (often another Postgres — not VMS)" : "free"}`);
-  console.log(`Port ${VMS_PORT} (VMS DB): ${p5434 ? "in use" : "NOT listening — run: npm run docker:infra"}`);
+  const p5432 = await probe("localhost", VMS_PORT);
+  console.log(`Postgres :${VMS_PORT}:   ${p5432 ? "listening" : "NOT listening — start local PostgreSQL"}`);
 
-  if (p5434) {
+  if (p5432) {
     try {
       const { createRequire } = await import("node:module");
       const { fileURLToPath } = await import("node:url");
@@ -107,9 +105,8 @@ async function main() {
       console.log(`VMS database:     FAILED — ${(e).message}`);
       if (String(e.message).includes("password authentication")) {
         console.log("");
-        console.log("  Wrong Postgres on this port. Run:");
-        console.log("    docker compose down");
-        console.log("    docker compose up -d postgres redis");
+        console.log("  Set up local PostgreSQL:");
+        console.log("    psql -U postgres -f scripts/setup-local-postgres.sql");
         console.log("    npm run seed");
       }
     }
@@ -119,7 +116,7 @@ async function main() {
   const apiDocker = await probe("localhost", 7001);
   console.log(`API :3000:        ${api ? "in use (host dev)" : "not running — run: npm run dev"}`);
   console.log(`API :7001:        ${apiDocker ? "in use (Docker)" : "not running — run: npm run docker:up"}`);
-  if (!api && p5434) {
+  if (!api && p5432) {
     console.log("                  (Postgres is up but API is missing — UI alone cannot sign in)");
   }
 
@@ -127,8 +124,8 @@ async function main() {
   console.log("  npm run dev");
   console.log("  Login: subdomain demo | admin@vms.local / admin123");
   console.log("\nIf login still fails:");
-  console.log("  npm run docker:reseed");
-  console.log("\nFull Docker (7000 series):");
+  console.log("  npm run seed");
+  console.log("\nDocker API + UI (Postgres stays on host):");
   console.log("  npm run docker:up");
   console.log("  Open: http://localhost:7000");
   console.log("  API:  http://localhost:7001/health");

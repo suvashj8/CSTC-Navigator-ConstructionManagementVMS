@@ -22,12 +22,13 @@ main().catch((e) => {
   console.error("");
   const msg = String((e as Error).message ?? e);
   if (msg.includes("password authentication") || msg.includes("28P01")) {
-    console.error("Wrong database on this port — another Postgres may be using :5432.");
-    console.error("VMS uses Docker Postgres on host port 7002. Run:");
-    console.error("  npm run docker:infra");
+    console.error("Cannot connect with MAIN_DB_* credentials.");
+    console.error("Set up local PostgreSQL:");
+    console.error("  psql -U postgres -f scripts/setup-local-postgres.sql");
     console.error("  npm run doctor");
   } else {
-    console.error("Is Docker Postgres running? Try: npm run docker:infra");
+    console.error("Is local PostgreSQL running on localhost:5432?");
+    console.error("  psql -U postgres -f scripts/setup-local-postgres.sql");
   }
   process.exit(1);
 });

@@ -39,6 +39,7 @@ export async function runSeed(tm: TenantManager): Promise<void> {
 
   if (tenantId) {
     await ensureDemoUsers(tm, tenantId);
+    await seedDemoData(tm, tenantId);
     return;
   }
 
@@ -51,6 +52,11 @@ export async function runSeed(tm: TenantManager): Promise<void> {
     admin.name
   );
   await seedDemoData(tm, id);
+}
+
+/** Populate demo locations/assets/etc. when the tenant DB has no assets yet. */
+export async function seedDemoSampleDataIfEmpty(tm: TenantManager, tenantId: string): Promise<void> {
+  await seedDemoData(tm, tenantId);
 }
 
 async function seedSuperUser(tm: TenantManager): Promise<void> {

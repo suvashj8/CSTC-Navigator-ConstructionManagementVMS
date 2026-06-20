@@ -1,9 +1,14 @@
-import { runSeed, syncDemoAccounts, syncPlatformSuperUser } from "./seed";
+import { runSeed, seedDemoSampleDataIfEmpty, syncDemoAccounts, syncPlatformSuperUser } from "./seed";
 import type { TenantManager } from "./tenant-manager";
+import { DEMO_SUBDOMAIN } from "./demo-accounts";
 
 let seedInflight: Promise<void> | null = null;
 let demoReady = false;
 let platformReady = false;
+
+function isDemoSeedEnabled(): boolean {
+  return process.env.SEED_ON_STARTUP === "true";
+}
 
 async function runSeedOnce(tm: TenantManager): Promise<void> {
   if (!seedInflight) {
@@ -25,6 +30,8 @@ export async function ensureDemoSeeded(tm: TenantManager, opts?: EnsureOpts): Pr
   try {
     const synced = await syncDemoAccounts(tm);
     if (synced && !opts?.force) {
+      const info = await tm.bySubdomain(DEMO_SUBDOMAIN);
+      await seedDemoSampleDataIfEmpty(tm, info.id);
       demoReady = true;
       platformReady = true;
       return;
@@ -75,6 +82,13 @@ export async function repairPlatformSeeded(tm: TenantManager): Promise<void> {
 
 /** Best-effort sync on API boot (no-op when demo tenant is absent). */
 export async function warmDemoOnStartup(tm: TenantManager): Promise<void> {
+  if (isDemoSeedEnabled()) {
+    await runSeedOnce(tm);
+    demoReady = true;
+    platformReady = true;
+    return;
+  }
+
   try {
     const synced = await syncDemoAccounts(tm);
     if (synced) {

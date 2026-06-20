@@ -9,7 +9,7 @@ const require = createRequire(join(root, "web/package.json"));
 const pg = require("pg");
 
 const host = process.env.MAIN_DB_HOST ?? "localhost";
-const port = Number(process.env.MAIN_DB_PORT ?? 7002);
+const port = Number(process.env.MAIN_DB_PORT ?? 5432);
 const user = process.env.MAIN_DB_USER ?? "vms";
 const password = process.env.MAIN_DB_PASSWORD ?? "vms";
 const database = process.env.MAIN_DB_NAME ?? "vms_main";
@@ -65,7 +65,8 @@ async function wait() {
   }
   console.error("");
   console.error(`Postgres not ready at ${host}:${port} after ${maxWaitMs / 1000}s.`);
-  console.error("Try: docker compose down && npm run docker:infra");
+  console.error("Start local PostgreSQL, then run: psql -U postgres -f scripts/setup-local-postgres.sql");
+  console.error("Or check MAIN_DB_* in web/.env.development");
   process.exit(1);
 }
 

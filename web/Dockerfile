@@ -52,9 +52,10 @@ RUN apk add --no-cache dumb-init postgresql-client redis
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
 
-# Copy entrypoint script
+# Copy entrypoint script (strip CRLF for Windows-checked-out repos)
 COPY --chown=nextjs:nodejs docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next

@@ -73,7 +73,7 @@ async function healthCheckPool(pool: Pool): Promise<boolean> {
 function dbConfig() {
   return {
     host: process.env.MAIN_DB_HOST ?? "localhost",
-    port: process.env.MAIN_DB_PORT ?? "7002",
+    port: process.env.MAIN_DB_PORT ?? "5432",
     user: process.env.MAIN_DB_USER ?? "vms",
     password: process.env.MAIN_DB_PASSWORD ?? "vms",
   };
@@ -86,7 +86,7 @@ function buildConnUrl(host: string, port: number, user: string, pass: string, da
 /**
  * Tenant DBs always live on the same Postgres as the main registry.
  * Use runtime MAIN_DB_HOST/PORT — never stale rows from host-vs-Docker switches
- * (e.g. localhost:7002 vs postgres:5432).
+ * (e.g. localhost:5432 vs host.docker.internal:5432 from Docker API).
  */
 function resolveTenantDbEndpoint(
   _storedHost: string | null | undefined,
@@ -155,7 +155,7 @@ export function getTenantManager() {
       await mainUp(main);
     },
 
-    /** Align registry host/port with current runtime (host dev 7002 vs Docker postgres:5432). */
+    /** Align registry host/port with current runtime (host vs Docker API). */
     async syncConnectionHosts() {
       const cfg = dbConfig();
       await main.query(`UPDATE tenant_db_connections SET host = $1, port = $2`, [

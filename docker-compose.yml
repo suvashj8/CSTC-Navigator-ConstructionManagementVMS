@@ -1,36 +1,11 @@
-# Full Docker stack — host ports use the 7000 series
-#   UI:       http://localhost:7000
-#   API:      http://localhost:7001
-#   Postgres: localhost:7002  (container :5432)
-#   Redis:    localhost:7003  (container :6379)
+# Docker stack — API/worker/UI in containers; Postgres runs on the host.
+#   UI:    http://localhost:7000
+#   API:   http://localhost:7001
+#   Redis: localhost:7003  (container :6379)
+#   DB:    host PostgreSQL (default localhost:5432 — containers use host.docker.internal)
 # Usage: docker compose up --build -d
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-vms}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
-      POSTGRES_DB: ${POSTGRES_DB:-vms_main}
-    ports:
-      - "127.0.0.1:7002:5432"
-    volumes:
-      - vms_pg:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vms} -d ${POSTGRES_DB:-vms_main}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -59,18 +34,23 @@ services:
     restart: unless-stopped
     ports:
       - "7001:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
-      MAIN_DB_HOST: postgres
-      MAIN_DB_PORT: 5432
-      MAIN_DB_USER: ${POSTGRES_USER:-vms}
-      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev}
-      MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
+      MAIN_DB_HOST: host.docker.internal
+      MAIN_DB_PORT: ${MAIN_DB_PORT:-5432}
+      MAIN_DB_USER: ${MAIN_DB_USER:-vms}
+      MAIN_DB_PASSWORD: ${MAIN_DB_PASSWORD:-vms}
+      MAIN_DB_NAME: ${MAIN_DB_NAME:-vms_main}
       REDIS_ADDR: redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
       JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-8}
       REFRESH_TOKEN_EXPIRY_DAYS: ${REFRESH_TOKEN_EXPIRY_DAYS:-30}
-      SEED_ON_STARTUP: "${SEED_ON_STARTUP:-false}"
+      SEED_ON_STARTUP: "${SEED_ON_STARTUP:-true}"
       EXPORT_DIR: /app/exports
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:7000}
       VMS_ALLOW_LAN_CORS: "false"
@@ -81,8 +61,6 @@ services:
     volumes:
       - vms_exports:/app/exports
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -105,17 +83,22 @@ services:
       target: runner
     restart: unless-stopped
     command: ["node", "scripts/worker.mjs"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
-      MAIN_DB_HOST: postgres
-      MAIN_DB_PORT: 5432
-      MAIN_DB_USER: ${POSTGRES_USER:-vms}
-      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev}
-      MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
+      MAIN_DB_HOST: host.docker.internal
+      MAIN_DB_PORT: ${MAIN_DB_PORT:-5432}
+      MAIN_DB_USER: ${MAIN_DB_USER:-vms}
+      MAIN_DB_PASSWORD: ${MAIN_DB_PASSWORD:-vms}
+      MAIN_DB_NAME: ${MAIN_DB_NAME:-vms_main}
       REDIS_ADDR: redis:6379
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
-      postgres:
+      redis:
         condition: service_healthy
       web:
         condition: service_started
@@ -154,7 +137,6 @@ services:
           memory: 64M
 
 volumes:
-  vms_pg:
   vms_redis:
   vms_exports:
 
