@@ -1,5 +1,9 @@
-# Production docker-compose
-# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Full Docker stack — host ports use the 7000 series
+#   UI:       http://localhost:7000
+#   API:      http://localhost:7001
+#   Postgres: localhost:7002  (container :5432)
+#   Redis:    localhost:7003  (container :6379)
+# Usage: docker compose up --build -d
 
 services:
   postgres:
@@ -7,10 +11,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vms}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
       POSTGRES_DB: ${POSTGRES_DB:-vms_main}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:7002:5432"
     volumes:
       - vms_pg:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d:ro
@@ -32,7 +36,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:7003:6379"
     volumes:
       - vms_redis:/data
     healthcheck:
@@ -54,21 +58,21 @@ services:
       target: runner
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "7001:3000"
     environment:
       NODE_ENV: production
       MAIN_DB_HOST: postgres
       MAIN_DB_PORT: 5432
       MAIN_DB_USER: ${POSTGRES_USER:-vms}
-      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev}
       MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
       REDIS_ADDR: redis:6379
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
       JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-8}
       REFRESH_TOKEN_EXPIRY_DAYS: ${REFRESH_TOKEN_EXPIRY_DAYS:-30}
       SEED_ON_STARTUP: "${SEED_ON_STARTUP:-false}"
       EXPORT_DIR: /app/exports
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:7000}
       VMS_ALLOW_LAN_CORS: "false"
       VMS_REDIS_REQUIRED: "true"
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -106,7 +110,7 @@ services:
       MAIN_DB_HOST: postgres
       MAIN_DB_PORT: 5432
       MAIN_DB_USER: ${POSTGRES_USER:-vms}
-      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev}
       MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
       REDIS_ADDR: redis:6379
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -130,8 +134,8 @@ services:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "7000:80"
+      - "7443:443"
     environment:
       API_PORT: 3000
     depends_on:

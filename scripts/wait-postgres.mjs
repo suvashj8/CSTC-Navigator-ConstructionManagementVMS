@@ -9,7 +9,7 @@ const require = createRequire(join(root, "web/package.json"));
 const pg = require("pg");
 
 const host = process.env.MAIN_DB_HOST ?? "localhost";
-const port = Number(process.env.MAIN_DB_PORT ?? 15432);
+const port = Number(process.env.MAIN_DB_PORT ?? 7002);
 const user = process.env.MAIN_DB_USER ?? "vms";
 const password = process.env.MAIN_DB_PASSWORD ?? "vms";
 const database = process.env.MAIN_DB_NAME ?? "vms_main";

@@ -5,7 +5,7 @@ let mainPool: Pool | null = null;
 function poolConfig() {
   return {
     host: process.env.MAIN_DB_HOST ?? "localhost",
-    port: Number(process.env.MAIN_DB_PORT ?? 15432),
+    port: Number(process.env.MAIN_DB_PORT ?? 7002),
     user: process.env.MAIN_DB_USER ?? "vms",
     password: process.env.MAIN_DB_PASSWORD ?? "vms",
     database: process.env.MAIN_DB_NAME ?? "vms_main",

@@ -1,14 +1,12 @@
-# Linux server production — client ports 5000 (UI) and 6000 (API).
-# Postgres/Redis stay internal only (no host ports) to avoid conflicts
-# with existing services on the server (e.g. :5432, :80, :5173).
+# Linux server production — client ports 7000 (UI) and 7001 (API).
+# Postgres/Redis stay internal only (no host ports).
 #
 # Usage:
 #   cp deploy/linux.env.example deploy/linux.env
-#   # edit deploy/linux.env (secrets, domain, LAN IP)
 #   docker compose -f docker-compose.linux.yml --env-file deploy/linux.env up --build -d
 #
-# Clients open: http://YOUR_SERVER:5000  (or your domain on port 5000)
-# Direct API:    http://YOUR_SERVER:6000/health
+# Clients open: http://YOUR_SERVER:7000
+# Direct API:    http://YOUR_SERVER:7001/health
 
 services:
   postgres:
@@ -41,7 +39,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "${VMS_API_PORT:-6000}:3000"
+      - "${VMS_API_PORT:-7001}:3000"
     environment:
       MAIN_DB_HOST: postgres
       MAIN_DB_PORT: 5432
@@ -52,7 +50,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-linux-env-min-32-chars}
       SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
       EXPORT_DIR: /app/exports
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:7000}
       VMS_ALLOW_LAN_CORS: "true"
     volumes:
       - ./web/exports:/app/exports
@@ -92,7 +90,7 @@ services:
         VITE_API_URL: ""
     restart: unless-stopped
     ports:
-      - "${VMS_UI_PORT:-5000}:80"
+      - "${VMS_UI_PORT:-7000}:80"
     environment:
       API_PORT: 3000
     depends_on:

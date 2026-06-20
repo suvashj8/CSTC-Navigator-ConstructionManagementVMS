@@ -82,7 +82,7 @@ async function runHealthChecks(): Promise<{ body: Record<string, unknown>; postg
         }
       }
 
-      checks.db_endpoint = `${process.env.MAIN_DB_HOST ?? "localhost"}:${process.env.MAIN_DB_PORT ?? "15432"}`;
+      checks.db_endpoint = `${process.env.MAIN_DB_HOST ?? "localhost"}:${process.env.MAIN_DB_PORT ?? "7002"}`;
     } catch (e) {
       checks.tenant_registry = (e as Error).message;
       warnings.push("Tenant registry issue — run: npm run docker:reseed");

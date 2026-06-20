@@ -23,7 +23,7 @@ main().catch((e) => {
   const msg = String((e as Error).message ?? e);
   if (msg.includes("password authentication") || msg.includes("28P01")) {
     console.error("Wrong database on this port — another Postgres may be using :5432.");
-    console.error("VMS uses Docker Postgres on host port 15432. Run:");
+    console.error("VMS uses Docker Postgres on host port 7002. Run:");
     console.error("  npm run docker:infra");
     console.error("  npm run doctor");
   } else {

@@ -1,7 +1,7 @@
 name: NavigatorVMS Local
 values:
   - key: baseUrl
-    value: 'http://localhost:3000'
+    value: 'http://localhost:7001'
     enabled: true
     type: default
   - key: tenantSubdomain

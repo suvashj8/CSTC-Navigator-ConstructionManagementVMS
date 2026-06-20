@@ -1,7 +1,7 @@
 import net from "node:net";
 import { execSync } from "node:child_process";
 
-const VMS_PORT = Number(process.env.MAIN_DB_PORT ?? 15432);
+const VMS_PORT = Number(process.env.MAIN_DB_PORT ?? 7002);
 const VMS_USER = process.env.MAIN_DB_USER ?? "vms";
 const VMS_PASS = process.env.MAIN_DB_PASSWORD ?? "vms";
 const VMS_DB = process.env.MAIN_DB_NAME ?? "vms_main";
@@ -41,7 +41,7 @@ async function main() {
   const p5432 = await probe("localhost", 5432);
   const p5434 = await probe("localhost", VMS_PORT);
   console.log(`Port 5432:        ${p5432 ? "in use (often another Postgres — not VMS)" : "free"}`);
-  console.log(`Port ${VMS_PORT} (VMS):  ${p5434 ? "in use" : "NOT listening — run: npm run docker:infra"}`);
+  console.log(`Port ${VMS_PORT} (VMS DB): ${p5434 ? "in use" : "NOT listening — run: npm run docker:infra"}`);
 
   if (p5434) {
     try {
@@ -116,7 +116,9 @@ async function main() {
   }
 
   const api = await probe("localhost", 3000);
-  console.log(`API :3000:        ${api ? "in use" : "not running — run: npm run dev"}`);
+  const apiDocker = await probe("localhost", 7001);
+  console.log(`API :3000:        ${api ? "in use (host dev)" : "not running — run: npm run dev"}`);
+  console.log(`API :7001:        ${apiDocker ? "in use (Docker)" : "not running — run: npm run docker:up"}`);
   if (!api && p5434) {
     console.log("                  (Postgres is up but API is missing — UI alone cannot sign in)");
   }
@@ -126,8 +128,10 @@ async function main() {
   console.log("  Login: subdomain demo | admin@vms.local / admin123");
   console.log("\nIf login still fails:");
   console.log("  npm run docker:reseed");
-  console.log("\nFull Docker (API in containers) — after code changes:");
-  console.log("  npm run docker:reset");
+  console.log("\nFull Docker (7000 series):");
+  console.log("  npm run docker:up");
+  console.log("  Open: http://localhost:7000");
+  console.log("  API:  http://localhost:7001/health");
 }
 
 main().catch((e) => {
