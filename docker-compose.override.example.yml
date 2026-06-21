@@ -10,7 +10,7 @@ services:
     ports:
       - "7002:5432"
     environment:
-      POSTGRES_PASSWORD: dev
+      POSTGRES_PASSWORD: vms
 
   redis:
     ports:
@@ -43,8 +43,13 @@ services:
   worker:
     build:
       target: builder
-    command: npm run dev:worker
+    command: npm run worker
     environment:
+      MAIN_DB_HOST: postgres
+      MAIN_DB_PORT: 5432
+      MAIN_DB_USER: vms
+      MAIN_DB_PASSWORD: vms
+      MAIN_DB_NAME: vms_main
       LOG_LEVEL: debug
     volumes:
       - ./web:/app

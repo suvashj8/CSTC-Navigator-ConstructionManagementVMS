@@ -9,6 +9,7 @@
     "lint": "eslint src --ext .ts,.tsx",
     "start": "next start -p 3000",
     "worker": "node scripts/worker.mjs",
+    "dev:worker": "node scripts/worker.mjs",
     "seed": "tsx --env-file=.env.development scripts/seed-demo.ts",
     "test": "vitest run",
     "test:watch": "vitest",

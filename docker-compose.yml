@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vms}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vms}
       POSTGRES_DB: ${POSTGRES_DB:-vms_main}
     ports:
       - "7002:5432"
@@ -64,7 +64,7 @@ services:
       MAIN_DB_HOST: postgres
       MAIN_DB_PORT: 5432
       MAIN_DB_USER: ${POSTGRES_USER:-vms}
-      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-vms}
       MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
       REDIS_ADDR: redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
@@ -110,7 +110,7 @@ services:
       MAIN_DB_HOST: postgres
       MAIN_DB_PORT: 5432
       MAIN_DB_USER: ${POSTGRES_USER:-vms}
-      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      MAIN_DB_PASSWORD: ${POSTGRES_PASSWORD:-vms}
       MAIN_DB_NAME: ${POSTGRES_DB:-vms_main}
       REDIS_ADDR: redis:6379
       LOG_LEVEL: ${LOG_LEVEL:-info}

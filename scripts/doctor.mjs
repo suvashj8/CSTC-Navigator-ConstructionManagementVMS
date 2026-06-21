@@ -40,8 +40,17 @@ async function main() {
 
   const p5432 = await probe("localhost", 5432);
   const p5434 = await probe("localhost", VMS_PORT);
+  const p7000 = await probe("localhost", 7000);
+  const p7001 = await probe("localhost", 7001);
+  const p7003 = await probe("localhost", 7003);
   console.log(`Port 5432:        ${p5432 ? "in use (often another Postgres — not VMS)" : "free"}`);
   console.log(`Port ${VMS_PORT} (VMS DB): ${p5434 ? "in use" : "NOT listening — run: npm run docker:infra"}`);
+  console.log(`Port 7000 (UI):    ${p7000 ? "in use" : "free"}`);
+  console.log(`Port 7001 (API):   ${p7001 ? "in use" : "free"}`);
+  console.log(`Port 7003 (Redis): ${p7003 ? "in use" : "free"}`);
+  if (p5434 || p7000 || p7001) {
+    console.log("                  Port conflict? Run: npm run docker:down  then  npm run docker:up");
+  }
 
   if (p5434) {
     try {
