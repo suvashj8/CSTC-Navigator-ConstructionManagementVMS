@@ -2,10 +2,24 @@
  * Prepare local dev stack: Docker infra, wait for Postgres, seed demo accounts.
  */
 import { execSync, spawnSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const EXPECT_DB_PORT = Number(process.env.MAIN_DB_PORT ?? 7002);
+
+function assertEnvLocalPort() {
+  const envLocal = join(root, "web", ".env.local");
+  if (!existsSync(envLocal)) return;
+  const text = readFileSync(envLocal, "utf8");
+  const m = text.match(/^MAIN_DB_PORT=(\d+)/m);
+  if (m && Number(m[1]) !== EXPECT_DB_PORT) {
+    console.error(`\nweb/.env.local has MAIN_DB_PORT=${m[1]} but Docker Postgres uses ${EXPECT_DB_PORT}.`);
+    console.error(`Set MAIN_DB_PORT=${EXPECT_DB_PORT} in web/.env.local (or delete the file), then run npm run dev again.\n`);
+    process.exit(1);
+  }
+}
 
 function run(cmd, args) {
   const r = spawnSync(cmd, args, {
@@ -17,6 +31,8 @@ function run(cmd, args) {
 }
 
 console.log("Navigator VMS — preparing dev stack\n");
+
+assertEnvLocalPort();
 
 run("node", ["scripts/free-api-port.mjs"]);
 run("node", ["scripts/check-docker.mjs"]);

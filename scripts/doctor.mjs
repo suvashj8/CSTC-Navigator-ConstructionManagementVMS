@@ -1,6 +1,10 @@
 import net from "node:net";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VMS_PORT = Number(process.env.MAIN_DB_PORT ?? 7002);
 const VMS_USER = process.env.MAIN_DB_USER ?? "vms";
 const VMS_PASS = process.env.MAIN_DB_PASSWORD ?? "vms";
@@ -20,8 +24,29 @@ function probe(host, port) {
   });
 }
 
+function readEnvPort(filePath) {
+  if (!existsSync(filePath)) return null;
+  const text = readFileSync(filePath, "utf8");
+  const m = text.match(/^MAIN_DB_PORT=(\d+)/m);
+  return m ? Number(m[1]) : null;
+}
+
 async function main() {
   console.log("Navigator VMS — health check\n");
+
+  const envLocal = join(root, "web", ".env.local");
+  const envDev = join(root, "web", ".env.development");
+  const localPort = readEnvPort(envLocal);
+  if (localPort != null && localPort !== VMS_PORT) {
+    console.log(`web/.env.local:   MAIN_DB_PORT=${localPort} (WRONG — Docker Postgres is on ${VMS_PORT})`);
+    console.log("                  Fix: set MAIN_DB_PORT=7002 in web/.env.local, or delete the file");
+    console.log("                  Then restart: npm run dev\n");
+  } else if (localPort != null) {
+    console.log(`web/.env.local:   MAIN_DB_PORT=${localPort} (ok)`);
+  } else {
+    const devPort = readEnvPort(envDev);
+    console.log(`web/.env.local:   not present (using .env.development port ${devPort ?? VMS_PORT})`);
+  }
 
   let dockerOk = false;
   for (let i = 0; i < 3 && !dockerOk; i++) {
@@ -57,7 +82,6 @@ async function main() {
       const { createRequire } = await import("node:module");
       const { fileURLToPath } = await import("node:url");
       const { dirname, join } = await import("node:path");
-      const root = join(dirname(fileURLToPath(import.meta.url)), "..");
       const require = createRequire(join(root, "web/package.json"));
       const pg = require("pg");
       const pool = new pg.Pool({
