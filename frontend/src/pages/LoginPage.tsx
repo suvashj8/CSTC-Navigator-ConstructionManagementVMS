@@ -76,9 +76,9 @@ export default function LoginPage() {
         DEMO_ACCOUNTS.some((a) => a.email === normalizedEmail && a.password === normalizedPassword);
 
       if (lower.includes("invalid") && isDemoCreds) {
-        toast.error("Demo data may be out of date", {
-          description: "Run: npm run docker:reseed — then sign in again",
-          duration: 12000,
+        toast.error("Demo sign-in failed", {
+          description: "Run: npm run docker:reseed — wait for it to finish, then sign in again",
+          duration: 15000,
         });
         return;
       }

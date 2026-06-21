@@ -184,6 +184,27 @@ export function getTenantManager() {
       await ensureReadyInflight;
     },
 
+    /** Drop cached tenant pools and re-sync registry (after demo repair / seed). */
+    async refreshConnections() {
+      ensureReadyInflight = null;
+      clearTenantPoolCache();
+      await mainUp(main);
+      const cfg = dbConfig();
+      await main.query(`UPDATE tenant_db_connections SET host = $1, port = $2`, [
+        cfg.host,
+        Number(cfg.port),
+      ]);
+      clearTenantPoolCache();
+    },
+
+    invalidateTenantPool(tenantId: string) {
+      const cached = pools.get(tenantId);
+      if (cached) {
+        void cached.pool.end().catch(() => {});
+        pools.delete(tenantId);
+      }
+    },
+
     async bySubdomain(subdomain: string): Promise<TenantInfo> {
       const res = await main.query(
         `SELECT t.tenant_id, t.subdomain, t.db_name, t.name, t.status,

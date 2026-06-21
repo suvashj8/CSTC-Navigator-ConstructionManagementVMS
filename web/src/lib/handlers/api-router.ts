@@ -273,18 +273,25 @@ async function tenantLogin(req: NextRequest) {
 
   const tm = getTenantManager();
   try {
+    const { ensurePostgresReachable } = await import("../ensure-postgres");
+    await ensurePostgresReachable();
+    await tm.ensureReady();
+
     const { ensureDemoSeeded, repairDemoSeeded } = await import("../ensure-demo");
     if (isDemo) {
       await ensureDemoSeeded(tm);
     }
+
     const info = await tm.bySubdomain(subdomain);
-    const pool = await tm.pool(info.id);
+    let pool = await tm.pool(info.id);
 
     let row = await lookupActiveTenantUser(pool, email);
     let passwordOk = await verifyTenantPassword(row, password);
 
     if (!passwordOk && isDemo) {
       await repairDemoSeeded(tm);
+      tm.invalidateTenantPool(info.id);
+      pool = await tm.pool(info.id);
       row = await lookupActiveTenantUser(pool, email);
       passwordOk = await verifyTenantPassword(row, password);
     }
@@ -302,10 +309,10 @@ async function tenantLogin(req: NextRequest) {
     }
     const msg = (e as Error).message ?? "";
     if (isInfrastructureError(msg)) {
-      return serviceUnavailable("database not reachable - start Docker, then run npm run dev:full:host from project root");
+      return serviceUnavailable("database not reachable — run npm run docker:reseed from project root");
     }
     if (isDemo && msg) {
-      return serviceUnavailable(`demo setup failed - run npm run seed (${msg})`);
+      return serviceUnavailable(`demo setup failed — run npm run docker:reseed (${msg})`);
     }
     return unauthorized("invalid tenant or credentials");
   }

@@ -41,11 +41,8 @@ export async function ensureDemoSeeded(tm: TenantManager, opts?: EnsureOpts): Pr
 /** Force full demo repair on login failure (re-sync + seed if needed). */
 export async function repairDemoSeeded(tm: TenantManager): Promise<void> {
   demoReady = false;
-  try {
-    await syncDemoAccounts(tm);
-  } catch {
-    /* fall through to full seed */
-  }
+  platformReady = false;
+  await tm.refreshConnections();
   await runSeedOnce(tm);
   demoReady = true;
   platformReady = true;

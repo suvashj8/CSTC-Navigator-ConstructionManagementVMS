@@ -70,7 +70,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
       JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-8}
       REFRESH_TOKEN_EXPIRY_DAYS: ${REFRESH_TOKEN_EXPIRY_DAYS:-30}
-      SEED_ON_STARTUP: "${SEED_ON_STARTUP:-false}"
+      SEED_ON_STARTUP: "${SEED_ON_STARTUP:-true}"
       EXPORT_DIR: /app/exports
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:7000,http://127.0.0.1:7000}
       VMS_ALLOW_LAN_CORS: "${VMS_ALLOW_LAN_CORS:-true}"
