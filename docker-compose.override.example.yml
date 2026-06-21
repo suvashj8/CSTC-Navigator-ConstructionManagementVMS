@@ -1,0 +1,74 @@
+# Copy to docker-compose.override.yml for hot-reload dev on the 7000 series (LAN-friendly).
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#   docker compose up --build
+#
+# Open on this PC:  http://localhost:7000
+# Open on LAN:      http://YOUR_LAN_IP:7000  (same ports: 7000 UI, 7001 API, 7002 PG, 7003 Redis)
+
+services:
+  postgres:
+    ports:
+      - "7002:5432"
+    environment:
+      POSTGRES_PASSWORD: dev
+
+  redis:
+    ports:
+      - "7003:6379"
+
+  web:
+    build:
+      target: builder
+    ports:
+      - "7001:3000"
+    environment:
+      JWT_SECRET: dev-jwt-secret-change-in-production-min-32-chars
+      SEED_ON_STARTUP: "true"
+      CORS_ORIGINS: http://localhost:7000,http://127.0.0.1:7000
+      VMS_ALLOW_LAN_CORS: "true"
+      VMS_REDIS_REQUIRED: "false"
+      LOG_LEVEL: debug
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev -- -H 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      target: builder
+    command: npm run dev:worker
+    environment:
+      LOG_LEVEL: debug
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  frontend:
+    build:
+      target: build
+    ports:
+      - "7000:5173"
+    environment:
+      # Empty = same-origin /api via Vite proxy — works from LAN (http://LAN_IP:7000)
+      VITE_API_URL:
+      VITE_DEV_API_HOST: web
+      VMS_SKIP_API_CHECK: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/dist
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    depends_on:
+      - web

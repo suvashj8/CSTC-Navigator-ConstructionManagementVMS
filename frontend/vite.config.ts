@@ -6,6 +6,10 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+const apiHost = process.env.VITE_DEV_API_HOST ?? "127.0.0.1";
+const apiPort = Number(process.env.API_PORT ?? "3000");
+const apiTarget = `http://${apiHost}:${apiPort}`;
+
 function probePort(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.connect({ host: "127.0.0.1", port });
@@ -20,11 +24,12 @@ function probePort(port: number): Promise<boolean> {
   });
 }
 
-function apiReachablePlugin(apiPort: number): Plugin {
+function apiReachablePlugin(): Plugin {
   return {
     name: "vms-api-reachable",
     async configureServer() {
       if (process.env.VMS_SKIP_API_CHECK === "true") return;
+      if (apiHost !== "127.0.0.1" && apiHost !== "localhost") return;
       const up = await probePort(apiPort);
       if (up) return;
       console.error("\n[VMS] API is not running on port", apiPort);
@@ -34,11 +39,9 @@ function apiReachablePlugin(apiPort: number): Plugin {
   };
 }
 
-const apiPort = Number(process.env.API_PORT ?? "3000");
-
 export default defineConfig({
   plugins: [
-    apiReachablePlugin(apiPort),
+    apiReachablePlugin(),
     react(),
     tailwindcss(),
     VitePWA({
@@ -76,16 +79,16 @@ export default defineConfig({
     port: 5173,
     host: true,
     proxy: {
-      "/api": { target: `http://127.0.0.1:${process.env.API_PORT ?? "3000"}`, changeOrigin: true },
-      "/health": { target: `http://127.0.0.1:${process.env.API_PORT ?? "3000"}`, changeOrigin: true },
+      "/api": { target: apiTarget, changeOrigin: true },
+      "/health": { target: apiTarget, changeOrigin: true },
     },
   },
   preview: {
     port: 5173,
     host: true,
     proxy: {
-      "/api": { target: `http://127.0.0.1:${process.env.API_PORT ?? "3000"}`, changeOrigin: true },
-      "/health": { target: `http://127.0.0.1:${process.env.API_PORT ?? "3000"}`, changeOrigin: true },
+      "/api": { target: apiTarget, changeOrigin: true },
+      "/health": { target: apiTarget, changeOrigin: true },
     },
   },
   build: {

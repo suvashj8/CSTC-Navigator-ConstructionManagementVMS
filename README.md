@@ -222,6 +222,8 @@ docker compose up --build -d
 
 Open **http://localhost:7000** · API health: **http://localhost:7001/health**
 
+**LAN / phone testing (same 7000-series ports):** use your PC's IP, e.g. `http://192.168.x.x:7000` (UI), `http://192.168.x.x:7001` (API). Allow ports **7000–7003** in Windows Firewall if needed. `VMS_ALLOW_LAN_CORS=true` is enabled by default for development.
+
 Or: `npm run docker:up`
 
 ### Linux server (ports 7000 + 7001)
